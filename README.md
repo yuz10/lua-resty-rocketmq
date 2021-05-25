@@ -101,17 +101,16 @@ To load this module, just do this
 
 there is an acl hook provided, usage is:
 ```lua
-    local aclHook = require("resty.rocketmq.acl_rpchook").new("RocketMQ","123456781")
+    local accessKey, secretKey = "RocketMQ", "12345678"
+    local aclHook = require("resty.rocketmq.acl_rpchook").new(accessKey, secretKey)
     p:addRPCHook(aclHook)
 ```
 
 #### produce
 `syntax: res, err = p:produce(topic, message, tags, keys, waitStoreMsgOk)`
 
-1. In sync model
-
-    In case of success, returns the a table of results.
-    In case of errors, returns `nil` with a string describing the error.
+  In case of success, returns the a table of results.
+  In case of errors, returns `nil` with a string describing the error.
 
 
 [Back to TOC](#table-of-contents)
