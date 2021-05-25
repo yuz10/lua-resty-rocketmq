@@ -265,13 +265,23 @@ local function doReqeust(ip, port, send, oneway)
 end
 _M.doReqeust = doReqeust
 
-local function request(code, addr, h, body, oneway)
-    ngx.log(ngx.DEBUG, ('\27[33msend:%s\27[0m %s %s'):format(codeName(code), cjson_safe.encode(h), body))
-    local send = encode(code, h, body, oneway)
+local function request(code, addr, header, body, oneway, RPCHook)
+    if RPCHook then
+        for _, hook in ipairs(RPCHook) do
+            hook.doBeforeRequest(addr, header, body)
+        end
+    end
+    ngx.log(ngx.DEBUG, ('\27[33msend:%s\27[0m %s %s'):format(codeName(code), cjson_safe.encode(header), body))
+    local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
-    local h, b, err = doReqeust(ip, port, send, oneway)
-    ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(respCodeName(h.code), h.remark or '', b))
-    return h, b, err
+    local respHeader, respBody, err = doReqeust(ip, port, send, oneway)
+    ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(respCodeName(respHeader.code), respHeader.remark or '', respBody))
+    if not oneway and RPCHook then
+        for _, hook in ipairs(RPCHook) do
+            hook.doAfterResponse(addr, header, body, respHeader, respBody)
+        end
+    end
+    return respHeader, respBody, err
 end
 _M.request = request
 

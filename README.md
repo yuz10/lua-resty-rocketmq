@@ -14,6 +14,7 @@ Table of Contents
     * [resty.rocketmq.producer](#restyrocketmqproducer)
         * [Methods](#methods)
             * [new](#new)
+            * [addRPCHook](#addRPCHook)
             * [produce](#produce)
 * [Installation](#installation)
 * [See Also](#see-also)
@@ -87,6 +88,22 @@ To load this module, just do this
 `syntax: p = producer.new(nameservers, produce_group)`
 
 `nameservers` is list of nameserver addresses
+
+#### addRPCHook
+
+`syntax: p:addRPCHook(hook)`
+
+`hook` is a table that contains two functions as follows:
+
+ - `doBeforeRequest(addr, header, body)`
+
+ - `doAfterResponse(addr, header, body, respHeader, respBody)`
+
+there is an acl hook provided, usage is:
+```lua
+    local aclHook = require("resty.rocketmq.acl_rpchook").new("RocketMQ","123456781")
+    p:addRPCHook(aclHook)
+```
 
 #### produce
 `syntax: res, err = p:produce(topic, message, tags, keys, waitStoreMsgOk)`

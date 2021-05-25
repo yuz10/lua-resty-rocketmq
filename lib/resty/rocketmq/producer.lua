@@ -20,7 +20,12 @@ function _M.new(nameservers, groupName)
         groupName = groupName,
         topicPublishInfoTable = {},
         brokerAddrTable = {},
+        RPCHook = {}
     }, _M)
+end
+
+function _M.addRPCHook(self, hook)
+    self.client:addRPCHook(hook)
 end
 
 local function topicRouteData2TopicPublishInfo(topic, route)
@@ -144,7 +149,7 @@ local function sendHeartbeatToAllBroker(self)
     for brokerName, brokers in pairs(self.brokerAddrTable) do
         local addr = brokers[0]
         if addr then
-            local h, b, err = self.client.sendHeartbeat(addr, heartbeatData)
+            local h, b, err = self.client:sendHeartbeat(addr, heartbeatData)
         end
     end
 end
@@ -179,9 +184,12 @@ local function produce(self, msg)
     local mqSelected = selectOneMessageQueue(topicPublishInfo)
     local brokerAddr = findBrokerAddressInPublish(self, mqSelected.brokerName, msg.topic)
     msg.queueId = mqSelected.queueId
-    local h, _, err = self.client.sendMessage(brokerAddr, msg)
+    local h, _, err = self.client:sendMessage(brokerAddr, msg)
     if not h then
         return nil, err
+    end
+    if h.code ~= core.RESPONSE_CODE.SUCCESS then
+        return nil, h.remark
     end
     h.sendResult = {
         messageQueue = {
@@ -260,7 +268,7 @@ function _M:transactionProduce(topic, execute, arg, message, tags, keys, waitSto
     end
     local _, commitLogOffset = utils.decodeMessageId(h.extFields.offsetMsgId or h.extFields.msgId)
     local brokerAddr = findBrokerAddressInPublish(self, h.sendResult.messageQueue.brokerName, topic)
-    self.client.endTransactionOneway(brokerAddr, {
+    self.client:endTransactionOneway(brokerAddr, {
         producerGroup = self.groupName,
         transationId = h.transationId,
         commitLogOffset = commitLogOffset,

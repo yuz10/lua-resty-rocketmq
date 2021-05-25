@@ -28,9 +28,17 @@ function _M.new(nameservers)
     return setmetatable({
         nameservers = nameservers_parsed,
         current_nameserver = 1,
+        RPCHook = {},
     }, _M)
 end
 
+function _M.addRPCHook(self, hook)
+    if type(hook) == 'table' and type(hook.doBeforeRequest) == 'function' and type(hook.doAfterResponse) == 'function' then
+        table.insert(self.RPCHook, hook)
+    else
+        return nil, 'hook should be functions'
+    end
+end
 
 function _M:chooseNameserver()
     local nameserver = self.nameservers[self.current_nameserver]
@@ -59,7 +67,7 @@ local function messageProperties2String(properties)
     return concat(res, '')
 end
 
-function _M.sendMessage(brokerAddr, msg)
+function _M:sendMessage(brokerAddr, msg)
     return core.request(REQUEST_CODE.SEND_MESSAGE_V2, brokerAddr, {
         a = msg.producerGroup,
         b = msg.topic,
@@ -74,15 +82,15 @@ function _M.sendMessage(brokerAddr, msg)
         k = msg.unitMode,
         l = msg.maxReconsumeTimes,
         m = msg.batch,
-    }, msg.body)
+    }, msg.body, false, self.RPCHook)
 end
 
-function _M.endTransactionOneway(brokerAddr, msg)
-    return core.request(REQUEST_CODE.END_TRANSACTION, brokerAddr, msg)
+function _M:endTransactionOneway(brokerAddr, msg)
+    return core.request(REQUEST_CODE.END_TRANSACTION, brokerAddr, msg, nil, true, self.RPCHook)
 end
 
-function _M.sendHeartbeat(brokerAddr, heartbeatData)
-    return core.request(REQUEST_CODE.HEART_BEAT, brokerAddr, {}, cjson_safe.encode(heartbeatData))
+function _M:sendHeartbeat(brokerAddr, heartbeatData)
+    return core.request(REQUEST_CODE.HEART_BEAT, brokerAddr, {}, cjson_safe.encode(heartbeatData), false, self.RPCHook)
 end
 
 return _M
