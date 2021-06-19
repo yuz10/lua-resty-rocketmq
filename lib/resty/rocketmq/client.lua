@@ -29,6 +29,7 @@ function _M.new(nameservers)
         nameservers = nameservers_parsed,
         current_nameserver = 1,
         RPCHook = {},
+        useTLS = false,
     }, _M)
 end
 
@@ -40,6 +41,10 @@ function _M.addRPCHook(self, hook)
     end
 end
 
+function _M.setUseTLS(self, useTLS)
+    self.useTLS = useTLS
+end
+
 function _M:chooseNameserver()
     local nameserver = self.nameservers[self.current_nameserver]
     self.current_nameserver = self.current_nameserver + 1
@@ -49,14 +54,10 @@ function _M:chooseNameserver()
     return nameserver
 end
 
-function _M:requestNameserver(send)
-    local nameserver = self:chooseNameserver()
-    return core.doReqeust(nameserver.ip, nameserver.port, send)
-end
-
 function _M:getTopicRouteInfoFromNameserver(topic)
-    local send = core.encode(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, { topic = topic })
-    return self:requestNameserver(send)
+    local nameserver = self:chooseNameserver()
+    local addr = nameserver.ip .. ':' .. nameserver.port
+    return core.request(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, addr, { topic = topic }, nil, false, self.RPCHook, self.useTLS)
 end
 
 local function messageProperties2String(properties)
@@ -82,15 +83,15 @@ function _M:sendMessage(brokerAddr, msg)
         k = msg.unitMode,
         l = msg.maxReconsumeTimes,
         m = msg.batch,
-    }, msg.body, false, self.RPCHook)
+    }, msg.body, false, self.RPCHook, self.useTLS)
 end
 
 function _M:endTransactionOneway(brokerAddr, msg)
-    return core.request(REQUEST_CODE.END_TRANSACTION, brokerAddr, msg, nil, true, self.RPCHook)
+    return core.request(REQUEST_CODE.END_TRANSACTION, brokerAddr, msg, nil, true, self.RPCHook, self.useTLS)
 end
 
 function _M:sendHeartbeat(brokerAddr, heartbeatData)
-    return core.request(REQUEST_CODE.HEART_BEAT, brokerAddr, {}, cjson_safe.encode(heartbeatData), false, self.RPCHook)
+    return core.request(REQUEST_CODE.HEART_BEAT, brokerAddr, {}, cjson_safe.encode(heartbeatData), false, self.RPCHook, self.useTLS)
 end
 
 return _M

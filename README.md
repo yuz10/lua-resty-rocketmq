@@ -15,6 +15,7 @@ Table of Contents
         * [Methods](#methods)
             * [new](#new)
             * [addRPCHook](#addRPCHook)
+            * [setUseTLS](#setUseTLS)
             * [produce](#produce)
 * [Installation](#installation)
 * [See Also](#see-also)
@@ -51,6 +52,14 @@ Synopsis
                 local message = "halo world"
 
                 local p = producer.new(nameservers, "produce_group")
+                
+                -- set acl
+                local aclHook = require("resty.rocketmq.acl_rpchook").new("RocketMQ","123456781")
+                p:addRPCHook(aclHook)
+                
+                -- use tls mode
+                p:setUseTLS(true)
+                
                 local res, err = p:produce("TopicTest", message)
                 if not res then
                     ngx.say("send err:", err)
@@ -105,6 +114,12 @@ there is an acl hook provided, usage is:
     local aclHook = require("resty.rocketmq.acl_rpchook").new(accessKey, secretKey)
     p:addRPCHook(aclHook)
 ```
+
+#### setUseTLS
+
+`syntax: p:setUseTLS(useTLS)`
+
+`useTLS` is a boolean
 
 #### produce
 `syntax: res, err = p:produce(topic, message, tags, keys, waitStoreMsgOk)`

@@ -28,6 +28,10 @@ function _M.addRPCHook(self, hook)
     self.client:addRPCHook(hook)
 end
 
+function _M.setUseTLS(self, useTLS)
+    self.client:setUseTLS(useTLS)
+end
+
 local function topicRouteData2TopicPublishInfo(topic, route)
     local info = {
         topicRouteData = route,

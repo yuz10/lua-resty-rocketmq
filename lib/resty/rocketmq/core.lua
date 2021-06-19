@@ -230,11 +230,17 @@ local function encode(code, h, body, oneway)
 end
 _M.encode = encode
 
-local function doReqeust(ip, port, send, oneway)
+local function doReqeust(ip, port, send, oneway, useTLS)
     local sock = ngx_socket_tcp()
     local res, err = sock:connect(ip, port)
     if not res then
         return nil, nil, ('connect %s:%s fail:%s'):format(ip, port, err)
+    end
+    if useTLS then
+        local ok, err = sock:sslhandshake(nil, nil, false)
+        if not ok then
+            return ok, nil, "failed to do ssl handshake: " .. err
+        end
     end
     local ok, err = sock:send(send)
     if not ok then
@@ -265,7 +271,7 @@ local function doReqeust(ip, port, send, oneway)
 end
 _M.doReqeust = doReqeust
 
-local function request(code, addr, header, body, oneway, RPCHook)
+local function request(code, addr, header, body, oneway, RPCHook, useTLS)
     if RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook.doBeforeRequest(addr, header, body)
@@ -274,8 +280,13 @@ local function request(code, addr, header, body, oneway, RPCHook)
     ngx.log(ngx.DEBUG, ('\27[33msend:%s\27[0m %s %s'):format(codeName(code), cjson_safe.encode(header), body))
     local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
-    local respHeader, respBody, err = doReqeust(ip, port, send, oneway)
-    ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(respCodeName(respHeader.code), respHeader.remark or '', respBody))
+    local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS)
+    if err then
+        return nil, nil, err
+    end
+    if not oneway then
+        ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(respCodeName(respHeader.code), respHeader.remark or '', respBody))
+    end
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook.doAfterResponse(addr, header, body, respHeader, respBody)
