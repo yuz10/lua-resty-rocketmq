@@ -155,21 +155,21 @@ local RESPONSE_CODE = {
 }
 _M.RESPONSE_CODE = RESPONSE_CODE
 
+local REQUEST_CODE_NAME, RESPONSE_CODE_NAME = {}, {}
+for name, code in pairs(REQUEST_CODE) do
+    REQUEST_CODE_NAME[code] = name
+end
+for name, code in pairs(RESPONSE_CODE) do
+    RESPONSE_CODE_NAME[code] = name
+end
+
 local function codeName(c)
-    for name, code in pairs(REQUEST_CODE) do
-        if code == c then
-            return name
-        end
-    end
+    return REQUEST_CODE_NAME[c]
 end
 _M.codeName = codeName
 
 local function respCodeName(c)
-    for name, code in pairs(RESPONSE_CODE) do
-        if code == c then
-            return name
-        end
-    end
+    return RESPONSE_CODE_NAME[c]
 end
 _M.respCodeName = respCodeName
 

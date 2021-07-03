@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-20.04
+    env: 
+      ROCEKTMQ_VER: 4.9.0
+      OPENRESTY_VER: 1.17.8.2
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      - name: setup JDK
+        uses: actions/setup-java@v2.1.0
+        with:
+          java-version: '8'
+          distribution: 'adopt'
+
+      - name: download rocketmq
+        run: |
+          cd ~
+          wget https://downloads.apache.org/rocketmq/${ROCEKTMQ_VER}/rocketmq-all-${ROCEKTMQ_VER}-bin-release.zip
+          unzip rocketmq-all-${ROCEKTMQ_VER}-bin-release.zip
+
+      - name: run rocketmq
+        run: |
+          cd ~/rocketmq-all-${ROCEKTMQ_VER}-bin-release/
+          bin/dledger/fast-try.sh start
+
+      - name: get openresty from cache
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/openresty
+          key: resty-${{ env.OPENRESTY_VER }}
+            
+      - name: download and build openresty
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cd ~
+          wget https://openresty.org/download/openresty-${OPENRESTY_VER}.tar.gz
+          tar -xzf openresty-${OPENRESTY_VER}.tar.gz
+          cd openresty-${OPENRESTY_VER}
+          ./configure --prefix=./openresty
+          make -j4
+          make install
+
+      - name: openresty version
+        run: |
+             export PATH=$PATH:~/openresty/nginx/sbin
+             sudo rm /usr/sbin/nginx 
+             sudo ln -s ~/openresty/nginx/sbin/nginx /usr/sbin/nginx 
+             nginx -v
+
+      - name: install test-nginx
+        uses: perl-actions/install-with-cpanm@v1
+        with:
+          install: Test::Nginx
+          
+      - name: create topic
+        run: |
+          cd ~/rocketmq-all-${ROCEKTMQ_VER}-bin-release/
+          bin/mqadmin updateTopic -n localhost:9876 -t TopicTest -c RaftCluster
+          
+      - name: test
+        run: |
+          cd $GITHUB_WORKSPACE
+          sudo prove -v t/*.t

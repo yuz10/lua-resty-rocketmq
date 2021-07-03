@@ -14,7 +14,10 @@ local _M = {}
 _M.__index = _M
 
 function _M.new(nameservers, groupName)
-    local cli = client.new(nameservers)
+    local cli, err = client.new(nameservers)
+    if not cli then
+        return nil, err
+    end
     return setmetatable({
         client = cli,
         groupName = groupName,

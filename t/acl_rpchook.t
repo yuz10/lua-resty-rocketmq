@@ -3,8 +3,6 @@
 use Test::Nginx::Socket::Lua;
 use Cwd qw(cwd);
 
-repeat_each(2);
-
 plan tests => repeat_each() * (3 * blocks());
 
 my $pwd = cwd();
@@ -21,7 +19,7 @@ run_tests();
 
 __DATA__
 
-=== TEST 1: add
+=== TEST 1: rpc hook
 --- http_config eval: $::HttpConfig
 --- config
     location /t {
@@ -29,7 +27,7 @@ __DATA__
             local new_hook = require "resty.rocketmq.acl_rpchook".new
             local hook = new_hook("RocketMQ", "12345678", "87654321")
             local h = {topic="topicA",batch=false,unitMode=false}
-            hook.doBeforeRequest("", h, null)
+            hook.doBeforeRequest("", h, nil)
             ngx.say(h.Signature)
         }
     }
@@ -39,5 +37,3 @@ GET /t
 FQ2fq7p3PuzMwBD7QkNW7AU32/c=
 --- no_error_log
 [error]
-
-
