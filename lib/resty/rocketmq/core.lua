@@ -1,5 +1,5 @@
 local cjson_safe = require("cjson.safe")
-local split = require("resty.rocketmq.utils").split
+local utils = require("resty.rocketmq.utils")
 local bit = require("bit")
 local rshift = bit.rshift
 local band = bit.band
@@ -10,13 +10,26 @@ local char = string.char
 local ngx_socket_tcp = ngx.socket.tcp
 local unpack = unpack
 local byte = string.byte
+local split = utils.split
 
 local _M = {}
 
-_M.SYSTEM_TOPIC_PREFIX = 'rmq_sys_'
 _M.CID_RMQ_SYS_PREFIX = 'CID_RMQ_SYS_'
 _M.RETRY_GROUP_TOPIC_PREFIX = '%RETRY%'
 _M.DLQ_GROUP_TOPIC_PREFIX = '%DLQ%'
+
+local SYSTEM_TOPIC_PREFIX = 'rmq_sys_'
+local SYSTEM_TOPIC_SET = {
+    TBW102 = true,
+    SCHEDULE_TOPIC_XXXX = true,
+    BenchmarkTest = true,
+    RMQ_SYS_TRANS_HALF_TOPIC = true,
+    RMQ_SYS_TRACE_TOPIC = true,
+    RMQ_SYS_TRANS_OP_HALF_TOPIC = true,
+    TRANS_CHECK_MAX_TIME_TOPIC = true,
+    SELF_TEST_TOPIC = true,
+    OFFSET_MOVED_EVENT = true,
+}
 
 local REQUEST_CODE = {
     SEND_MESSAGE = 10,
@@ -162,21 +175,17 @@ end
 for name, code in pairs(RESPONSE_CODE) do
     RESPONSE_CODE_NAME[code] = name
 end
+_M.REQUEST_CODE_NAME = REQUEST_CODE_NAME
+_M.RESPONSE_CODE_NAME = RESPONSE_CODE_NAME
 
-local function codeName(c)
-    return REQUEST_CODE_NAME[c]
-end
-_M.codeName = codeName
-
-local function respCodeName(c)
-    return RESPONSE_CODE_NAME[c]
-end
-_M.respCodeName = respCodeName
-
+_M.COMPRESSED_FLAG = 1;
+_M.MULTI_TAGS_FLAG = 2;
 _M.TRANSACTION_NOT_TYPE = 0
 _M.TRANSACTION_PREPARED_TYPE = 4
 _M.TRANSACTION_COMMIT_TYPE = 8
 _M.TRANSACTION_ROLLBACK_TYPE = 12
+_M.BORNHOST_V6_FLAG = lshift(1, 4)
+_M.STOREHOSTADDRESS_V6_FLAG = lshift(1, 5)
 
 _M.PERM_PRIORITY = 8
 _M.PERM_READ = 4
@@ -190,6 +199,10 @@ local VALID_PATTERN_STR = "^[%|a-zA-Z0-9_-]+$"
 
 function _M.checkTopic(t)
     return ngx.re.match(t, VALID_PATTERN_STR, 'jo') and #t < 127
+end
+
+function _M.isSystemTopic(t)
+    return SYSTEM_TOPIC_SET[t] or string.find(t, SYSTEM_TOPIC_PREFIX, nil, true) == 1
 end
 
 function _M.checkMessage(m)
@@ -230,6 +243,31 @@ local function encode(code, h, body, oneway)
 end
 _M.encode = encode
 
+local function getByte(buffer, offset)
+    return byte(buffer, offset), offset + 1
+end
+
+local function getShort(buffer, offset)
+    local res = lshift(byte(buffer, offset), 8) +
+            byte(buffer, offset + 1)
+    return res, offset + 2
+end
+
+local function getInt(buffer, offset)
+    local res = lshift(byte(buffer, offset), 24) +
+            lshift(byte(buffer, offset + 1), 16) +
+            lshift(byte(buffer, offset + 2), 8) +
+            byte(buffer, offset + 3)
+    return res, offset + 4
+end
+
+local function getLong(buffer, offset)
+    local res1, res2
+    res1, offset = getInt(buffer, offset)
+    res2, offset = getInt(buffer, offset)
+    return lshift(res1, 32) + res2, offset
+end
+
 local function doReqeust(ip, port, send, oneway, useTLS)
     local sock = ngx_socket_tcp()
     local res, err = sock:connect(ip, port)
@@ -253,10 +291,7 @@ local function doReqeust(ip, port, send, oneway, useTLS)
     if not recv then
         return nil, nil, err
     end
-    local length = lshift(byte(recv, 1), 24) +
-            lshift(byte(recv, 2), 16) +
-            lshift(byte(recv, 3), 8) +
-            byte(recv, 4)
+    local length = getInt(recv, 1)
     local recv, err = sock:receive(length)
     if not recv then
         return nil, nil, err
@@ -277,7 +312,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS)
             hook.doBeforeRequest(addr, header, body)
         end
     end
-    ngx.log(ngx.DEBUG, ('\27[33msend:%s\27[0m %s %s'):format(codeName(code), cjson_safe.encode(header), body))
+    ngx.log(ngx.DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
     local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS)
@@ -285,7 +320,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS)
         return nil, nil, err
     end
     if not oneway then
-        ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(respCodeName(respHeader.code), respHeader.remark or '', respBody))
+        ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(RESPONSE_CODE_NAME[respHeader.code] or respHeader.code, respHeader.remark or '', respBody))
     end
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
@@ -295,5 +330,57 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS)
     return respHeader, respBody, err
 end
 _M.request = request
+
+function _M.decodeMsg(buffer, readBody, isClient)
+    local msgExt = {}
+    local offset = 1
+    local _
+    msgExt.storeSize, offset = getInt(buffer, offset)
+    _, offset = getInt(buffer, offset) --MAGICCODE
+    msgExt.bodyCRC, offset = getInt(buffer, offset)
+    msgExt.queueId, offset = getInt(buffer, offset)
+    msgExt.flag, offset = getInt(buffer, offset)
+    msgExt.queueOffset, offset = getLong(buffer, offset)
+    msgExt.commitLogOffset, offset = getLong(buffer, offset)
+    msgExt.sysFlag, offset = getInt(buffer, offset)
+    msgExt.bornTimeStamp, offset = getLong(buffer, offset)
+
+    local bornhostIPLength = band(msgExt.sysFlag, _M.BORNHOST_V6_FLAG) == 0 and 4 or 16;
+    local bornhostIP, bornhostPort = string.sub(buffer, offset, offset + bornhostIPLength - 1)
+    offset = offset + bornhostIPLength
+    bornhostPort, offset = getInt(buffer, offset)
+    msgExt.bornHost = utils.toIp(bornhostIP) .. ':' .. bornhostPort
+
+    msgExt.storeTimestamp, offset = getLong(buffer, offset)
+
+    local storehostIPLength = band(msgExt.sysFlag, _M.STOREHOSTADDRESS_V6_FLAG) == 0 and 4 or 16;
+    local storeHostIp, storeHostPort = string.sub(buffer, offset, offset + storehostIPLength - 1)
+    offset = offset + bornhostIPLength
+    storeHostPort, offset = getInt(buffer, offset)
+    msgExt.storeHost = utils.toIp(storeHostIp) .. ':' .. storeHostPort
+
+    msgExt.reconsumeTimes, offset = getInt(buffer, offset)
+    msgExt.preparedTransactionOffset, offset = getLong(buffer, offset)
+
+    local bodyLen, topicLen, propertiesLength
+    bodyLen, offset = getInt(buffer, offset)
+    if bodyLen > 0 and readBody then
+        msgExt.body = string.sub(buffer, offset, offset + bodyLen - 1)
+    end
+    offset = offset + bodyLen
+    topicLen, offset = getByte(buffer, offset)
+    msgExt.topic = string.sub(buffer, offset, offset + topicLen - 1)
+    offset = offset + topicLen
+
+    propertiesLength, offset = getShort(buffer, offset)
+    msgExt.properties = utils.string2messageProperties(string.sub(buffer, offset, offset + propertiesLength - 1))
+
+    msgExt.msgId = utils.createMessageId(storeHostIp, storeHostPort, msgExt.commitLogOffset)
+
+    if isClient then
+        msgExt.offsetMsgId = msgExt.msgId
+    end
+    return msgExt
+end
 
 return _M

@@ -2,6 +2,8 @@ local bit = require("bit")
 local tohex = bit.tohex
 local band = bit.band
 local bor = bit.bor
+local lshift = bit.lshift
+local rshift = bit.rshift
 local fmt = string.format
 local random = math.random
 local find, sub, append = string.find, string.sub, table.insert
@@ -98,10 +100,21 @@ local function string2bytes(s)
     return table.concat(res)
 end
 
+local b2h = '0123456789ABCDEF'
+local function bytes2string(s)
+    local res = {}
+    for i = 1, #s do
+        local b = byte(s, i)
+        table.insert(res, char(byte(b2h, rshift(b, 4) + 1)))
+        table.insert(res, char(byte(b2h, band(b, 0x0f) + 1)))
+    end
+    return table.concat(res)
+end
+
 local function toNumber(a)
     local res = 0
     for i = 1, #a do
-        res = res * 256 + byte(a, i)
+        res = lshift(res, 8) + byte(a, i)
     end
     return res
 end
@@ -123,13 +136,43 @@ local function toIp(a)
     return '[' .. table.concat(res, ':') .. ']'
 
 end
+_M.toIp = toIp
+
+function _M.createMessageId(ip, port, offset)
+    local portInt = {}
+    for i = 1, 4 do
+        portInt[5 - i] = char(band(port, 0xff))
+        port = rshift(port, 8)
+    end
+
+    local offsetLong = {}
+    for i = 1, 8 do
+        offsetLong[9 - i] = char(band(offset, 0xff))
+        offset = rshift(offset, 8)
+    end
+
+    return bytes2string(ip .. table.concat(portInt) .. table.concat(offsetLong))
+end
 
 function _M.decodeMessageId(msgId)
     local ipLength = #msgId == 32 and 4 * 2 or 16 * 2
     local ip = string2bytes(msgId:sub(1, ipLength))
     local port = string2bytes(msgId:sub(ipLength + 1, ipLength + 8))
-    local data = string2bytes(msgId:sub(ipLength + 8 + 1, ipLength + 8 + 16))
-    return toIp(ip) .. toNumber(port), tonumber(data)
+    local offset = string2bytes(msgId:sub(ipLength + 8 + 1, ipLength + 8 + 16))
+    return toIp(ip) .. ':' .. toNumber(port), toNumber(offset)
+end
+
+function _M.string2messageProperties(str)
+    local map = {}
+    if not str or #str == 0 then
+        return map
+    end
+    local array = split(str, string.char(2))
+    for _, v in ipairs(array) do
+        local spl = split(v, string.char(1), 2)
+        map[spl[1]] = spl[2]
+    end
+    return map
 end
 
 return _M
