@@ -164,7 +164,7 @@ To load this module, just do this
 
 #### addRPCHook
 
-`syntax: p:addRPCHook(hook)`
+`syntax: adm:addRPCHook(hook)`
 
 `hook` is a table that contains two functions as follows:
 
@@ -176,71 +176,71 @@ there is an acl hook provided, usage is:
 ```lua
     local accessKey, secretKey = "RocketMQ", "12345678"
     local aclHook = require("resty.rocketmq.acl_rpchook").new(accessKey, secretKey)
-    p:addRPCHook(aclHook)
+    adm:addRPCHook(aclHook)
 ```
 
 #### setUseTLS
 
-`syntax: p:setUseTLS(useTLS)`
+`syntax: adm:setUseTLS(useTLS)`
 
 `useTLS` is a boolean
 
 #### createTopic
 `syntax: res, err = adm:createTopic(defaultTopic, newTopic, queueNum, topicSysFlag)`
 
-defaultTopic: usually "TBW102"
-newTopic: the new topic name
-queueNum: read and write queue numbers
-topicSysFlag: system flag of the topic
+- defaultTopic: usually "TBW102"
+- newTopic: the new topic name
+- queueNum: read and write queue numbers
+- topicSysFlag: system flag of the topic
 
 
 #### createTopicForBroker
 `syntax: res, err = adm:createTopicForBroker(addr, defaultTopic, topicConfig)`
 
-addr: broker address
-defaultTopic: usually "TBW102"
-topicConfig: a table containing:
-- topic
-- defaultTopic
-- readQueueNums
-- writeQueueNums
-- perm
-- topicFilterType
-- topicSysFlag
-- order
+- addr: broker address
+- defaultTopic: usually "TBW102"
+- topicConfig: a table containing:
+  - topic
+  - defaultTopic
+  - readQueueNums
+  - writeQueueNums
+  - perm
+  - topicFilterType
+  - topicSysFlag
+  - order
 
 #### searchOffset
 `syntax: res, err = adm:searchOffset(mq, timestamp)`
 
-mq: a table containing:
-- brokerName
-- topic
-- queueId
-timestamp: search time
+- mq: a table containing:
+   - brokerName
+   - topic
+   - queueId
+- timestamp: search time
 
 #### maxOffset
 `syntax: res, err = adm:maxOffset(mq)`
 
-mq: a table containing:
-- brokerName
-- topic
-- queueId
+- mq: a table containing:
+   - brokerName
+   - topic
+   - queueId
 
 #### minOffset
 `syntax: res, err = adm:minOffset(mq)`
 
-mq: a table containing:
-- brokerName
-- topic
-- queueId
+- mq: a table containing:
+   - brokerName
+   - topic
+   - queueId
 
 #### earliestMsgStoreTime
 `syntax: res, err = adm:earliestMsgStoreTime(mq)`
 
-mq: a table containing:
-- brokerName
-- topic
-- queueId
+- mq: a table containing:
+   - brokerName
+   - topic
+   - queueId
 
 #### viewMessage
 `syntax: res, err = adm:viewMessage(offsetMsgId)`
