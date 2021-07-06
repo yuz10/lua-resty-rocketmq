@@ -17,6 +17,18 @@ Table of Contents
             * [addRPCHook](#addRPCHook)
             * [setUseTLS](#setUseTLS)
             * [produce](#produce)
+    * [resty.rocketmq.admin](#restyrocketmqadmin)
+      * [Methods](#methods)
+          * [new](#new)
+          * [addRPCHook](#addRPCHook)
+          * [setUseTLS](#setUseTLS)
+          * [createTopic](#createTopic)
+          * [createTopicForBroker](#createTopicForBroker)
+          * [searchOffset](#searchOffset)
+          * [maxOffset](#maxOffset)
+          * [minOffset](#minOffset)
+          * [earliestMsgStoreTime](#earliestMsgStoreTime)
+          * [viewMessage](#viewMessage)
 * [Installation](#installation)
 * [See Also](#see-also)
 
@@ -130,6 +142,111 @@ there is an acl hook provided, usage is:
 
 [Back to TOC](#table-of-contents)
 
+
+resty.rocketmq.admin
+----------------------
+
+To load this module, just do this
+
+```lua
+    local admin = require "resty.rocketmq.admin"
+```
+
+[Back to TOC](#table-of-contents)
+
+### Methods
+
+#### new
+
+`syntax: adm = admin.new(nameservers)`
+
+`nameservers` is list of nameserver addresses
+
+#### addRPCHook
+
+`syntax: p:addRPCHook(hook)`
+
+`hook` is a table that contains two functions as follows:
+
+- `doBeforeRequest(addr, header, body)`
+
+- `doAfterResponse(addr, header, body, respHeader, respBody)`
+
+there is an acl hook provided, usage is:
+```lua
+    local accessKey, secretKey = "RocketMQ", "12345678"
+    local aclHook = require("resty.rocketmq.acl_rpchook").new(accessKey, secretKey)
+    p:addRPCHook(aclHook)
+```
+
+#### setUseTLS
+
+`syntax: p:setUseTLS(useTLS)`
+
+`useTLS` is a boolean
+
+#### createTopic
+`syntax: res, err = adm:createTopic(defaultTopic, newTopic, queueNum, topicSysFlag)`
+
+defaultTopic: usually "TBW102"
+newTopic: the new topic name
+queueNum: read and write queue numbers
+topicSysFlag: system flag of the topic
+
+
+#### createTopicForBroker
+`syntax: res, err = adm:createTopicForBroker(addr, defaultTopic, topicConfig)`
+
+addr: broker address
+defaultTopic: usually "TBW102"
+topicConfig: a table containing:
+- topic
+- defaultTopic
+- readQueueNums
+- writeQueueNums
+- perm
+- topicFilterType
+- topicSysFlag
+- order
+
+#### searchOffset
+`syntax: res, err = adm:searchOffset(mq, timestamp)`
+
+mq: a table containing:
+- brokerName
+- topic
+- queueId
+timestamp: search time
+
+#### maxOffset
+`syntax: res, err = adm:maxOffset(mq)`
+
+mq: a table containing:
+- brokerName
+- topic
+- queueId
+
+#### minOffset
+`syntax: res, err = adm:minOffset(mq)`
+
+mq: a table containing:
+- brokerName
+- topic
+- queueId
+
+#### earliestMsgStoreTime
+`syntax: res, err = adm:earliestMsgStoreTime(mq)`
+
+mq: a table containing:
+- brokerName
+- topic
+- queueId
+
+#### viewMessage
+`syntax: res, err = adm:viewMessage(offsetMsgId)`
+
+
+[Back to TOC](#table-of-contents)
 
 Installation
 ============
