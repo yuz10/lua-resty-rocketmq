@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v2
         id: cache
         with:
-          path: ~/openresty
+          path: ~/openresty-${OPENRESTY_VER}
           key: resty-${{ env.OPENRESTY_VER }}
 
       - name: download and build openresty
@@ -56,10 +56,10 @@ jobs:
 
       - name: openresty version
         run: |
-             export PATH=$PATH:~/openresty/nginx/sbin
+             export PATH=$PATH:~/openresty-${OPENRESTY_VER}/openresty/nginx/sbin
              sudo rm /usr/sbin/nginx
-             sudo ln -s ~/openresty/nginx/sbin/nginx /usr/sbin/nginx
-             ~/openresty/nginx/sbin/nginx -v
+             sudo ln -s ~/openresty-${OPENRESTY_VER}/openresty/nginx/sbin/nginx /usr/sbin/nginx
+             nginx -v
 
       - name: install test-nginx
         uses: perl-actions/install-with-cpanm@v1
