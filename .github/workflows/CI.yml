@@ -59,7 +59,7 @@ jobs:
              export PATH=$PATH:~/openresty/nginx/sbin
              sudo rm /usr/sbin/nginx
              sudo ln -s ~/openresty/nginx/sbin/nginx /usr/sbin/nginx
-             nginx -v
+             ~/openresty/nginx/sbin/nginx -v
 
       - name: install test-nginx
         uses: perl-actions/install-with-cpanm@v1
