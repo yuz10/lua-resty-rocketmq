@@ -13,7 +13,7 @@ jobs:
   test:
     runs-on: ubuntu-20.04
     env:
-      ROCEKTMQ_VER: 4.9.0
+      ROCEKTMQ_VER: 4.9.1
       OPENRESTY_VER: 1.17.8.2
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
