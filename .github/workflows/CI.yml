@@ -45,7 +45,10 @@ jobs:
           sudo apt-get -y install openresty
 
       - name: openresty version
-        run: nginx -v
+        run: |
+          sudo rm /usr/sbin/nginx
+          sudo ln -s /usr/local/openresty/nginx/sbin/nginx /usr/sbin/nginx
+          nginx -v
 
       - name: install test-nginx
         uses: perl-actions/install-with-cpanm@v1
