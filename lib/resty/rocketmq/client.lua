@@ -44,7 +44,7 @@ function _M.addRPCHook(self, hook)
     if type(hook) == 'table' and type(hook.doBeforeRequest) == 'function' and type(hook.doAfterResponse) == 'function' then
         table.insert(self.RPCHook, hook)
     else
-        return nil, 'hook should be functions'
+        error('hook should be functions')
     end
 end
 

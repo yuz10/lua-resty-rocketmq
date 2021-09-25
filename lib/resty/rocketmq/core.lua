@@ -184,6 +184,14 @@ _M.TRANSACTION_NOT_TYPE = 0
 _M.TRANSACTION_PREPARED_TYPE = 4
 _M.TRANSACTION_COMMIT_TYPE = 8
 _M.TRANSACTION_ROLLBACK_TYPE = 12
+
+_M.TRANSACTION_TYPE_MAP = {
+    [_M.TRANSACTION_NOT_TYPE] = "UNKNOW",
+    [_M.TRANSACTION_PREPARED_TYPE] = "UNKNOW",
+    [_M.TRANSACTION_COMMIT_TYPE] = "COMMIT_MESSAGE",
+    [_M.TRANSACTION_ROLLBACK_TYPE] = "ROLLBACK_MESSAGE",
+}
+
 _M.BORNHOST_V6_FLAG = lshift(1, 4)
 _M.STOREHOSTADDRESS_V6_FLAG = lshift(1, 5)
 
@@ -194,6 +202,12 @@ _M.PERM_INHERIT = 1
 
 _M.RPC_TYPE = 1  -- 0 request 1 response
 _M.RPC_ONEWAY = 2 -- 0 twoway, 2 oneway
+
+_M.Normal_Msg = 0
+_M.Trans_Msg_Half = 1
+_M.Trans_msg_Commit = 2
+_M.Delay_Msg = 3
+_M.maxMessageSize = 1024 * 1024 * 4
 
 local VALID_PATTERN_STR = "^[%|a-zA-Z0-9_-]+$"
 
@@ -309,7 +323,7 @@ _M.doReqeust = doReqeust
 local function request(code, addr, header, body, oneway, RPCHook, useTLS)
     if RPCHook then
         for _, hook in ipairs(RPCHook) do
-            hook.doBeforeRequest(addr, header, body)
+            hook:doBeforeRequest(addr, header, body)
         end
     end
     ngx.log(ngx.DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
@@ -324,7 +338,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS)
     end
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
-            hook.doAfterResponse(addr, header, body, respHeader, respBody)
+            hook:doAfterResponse(addr, header, body, respHeader, respBody)
         end
     end
     return respHeader, respBody, err
@@ -345,17 +359,17 @@ function _M.decodeMsg(buffer, readBody, isClient)
     msgExt.sysFlag, offset = getInt(buffer, offset)
     msgExt.bornTimeStamp, offset = getLong(buffer, offset)
 
-    local bornhostIPLength = band(msgExt.sysFlag, _M.BORNHOST_V6_FLAG) == 0 and 4 or 16;
-    local bornhostIP, bornhostPort = string.sub(buffer, offset, offset + bornhostIPLength - 1)
-    offset = offset + bornhostIPLength
-    bornhostPort, offset = getInt(buffer, offset)
-    msgExt.bornHost = utils.toIp(bornhostIP) .. ':' .. bornhostPort
+    local bornHostIPLength = band(msgExt.sysFlag, _M.BORNHOST_V6_FLAG) == 0 and 4 or 16;
+    local bornHostIP, bornHostPort = string.sub(buffer, offset, offset + bornHostIPLength - 1)
+    offset = offset + bornHostIPLength
+    bornHostPort, offset = getInt(buffer, offset)
+    msgExt.bornHost = utils.toIp(bornHostIP) .. ':' .. bornHostPort
 
     msgExt.storeTimestamp, offset = getLong(buffer, offset)
 
-    local storehostIPLength = band(msgExt.sysFlag, _M.STOREHOSTADDRESS_V6_FLAG) == 0 and 4 or 16;
-    local storeHostIp, storeHostPort = string.sub(buffer, offset, offset + storehostIPLength - 1)
-    offset = offset + bornhostIPLength
+    local storeHostIPLength = band(msgExt.sysFlag, _M.STOREHOSTADDRESS_V6_FLAG) == 0 and 4 or 16;
+    local storeHostIp, storeHostPort = string.sub(buffer, offset, offset + storeHostIPLength - 1)
+    offset = offset + bornHostIPLength
     storeHostPort, offset = getInt(buffer, offset)
     msgExt.storeHost = utils.toIp(storeHostIp) .. ':' .. storeHostPort
 

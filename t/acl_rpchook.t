@@ -27,7 +27,7 @@ __DATA__
             local new_hook = require "resty.rocketmq.acl_rpchook".new
             local hook = new_hook("RocketMQ", "12345678", "87654321")
             local h = {topic="topicA",batch=false,unitMode=false}
-            hook.doBeforeRequest("", h, nil)
+            hook:doBeforeRequest("", h, nil)
             ngx.say(h.Signature)
         }
     }
