@@ -9,31 +9,36 @@ local function hmca_sha1_base64(key, content)
     m:update(content)
     return encode_base64(m:final())
 end
-local function new(accessKey, secretKey, securityToken)
-    return {
-        doBeforeRequest = function(addr, header, body)
-            header.AccessKey = accessKey
-            header.SecurityToken = securityToken
-            local keys = {}
-            for k, v in pairs(header) do
-                if k ~= 'Signature' then
-                    table.insert(keys, k)
-                end
-            end
-            table.sort(keys)
-            local content = ''
-            for _, k in ipairs(keys) do
-                content = content .. tostring(header[k])
-            end
-            if body then
-                content = content .. body
-            end
-            header.Signature = hmca_sha1_base64(secretKey, content)
-        end,
-        doAfterResponse = empty,
-    }
+
+local _M = {}
+local mt = { __index = _M }
+function _M.doBeforeRequest(self, addr, header, body)
+    header.AccessKey = self.accessKey
+    header.SecurityToken = self.securityToken
+    local keys = {}
+    for k, v in pairs(header) do
+        if k ~= 'Signature' then
+            table.insert(keys, k)
+        end
+    end
+    table.sort(keys)
+    local content = ''
+    for _, k in ipairs(keys) do
+        content = content .. tostring(header[k])
+    end
+    if body then
+        content = content .. body
+    end
+    header.Signature = hmca_sha1_base64(self.secretKey, content)
+end
+_M.doAfterResponse = empty
+
+function _M.new(accessKey, secretKey, securityToken)
+    return setmetatable({
+        accessKey = accessKey,
+        secretKey = secretKey,
+        securityToken = securityToken
+    }, mt)
 end
 
-return {
-    new = new
-}
+return _M

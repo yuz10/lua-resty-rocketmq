@@ -16,12 +16,14 @@ Table of Contents
             * [new](#new)
             * [addRPCHook](#addRPCHook)
             * [setUseTLS](#setUseTLS)
+            * [registerSendMessageHook](#registerSendMessageHook)
+            * [registerEndTransactionHook](#registerEndTransactionHook)
             * [produce](#produce)
     * [resty.rocketmq.admin](#restyrocketmqadmin)
       * [Methods](#methods)
-          * [new](#new)
-          * [addRPCHook](#addRPCHook)
-          * [setUseTLS](#setUseTLS)
+          * [new](#new-1)
+          * [addRPCHook](#addRPCHook-1)
+          * [setUseTLS](#setUseTLS-1)
           * [createTopic](#createTopic)
           * [createTopicForBroker](#createTopicForBroker)
           * [searchOffset](#searchOffset)
@@ -106,7 +108,7 @@ To load this module, just do this
 
 #### new
 
-`syntax: p = producer.new(nameservers, produce_group)`
+`syntax: p = producer.new(nameservers, produce_group, enableMsgTrace)`
 
 `nameservers` is list of nameserver addresses
 
@@ -116,9 +118,8 @@ To load this module, just do this
 
 `hook` is a table that contains two functions as follows:
 
- - `doBeforeRequest(addr, header, body)`
-
- - `doAfterResponse(addr, header, body, respHeader, respBody)`
+ - `doBeforeRequest(self, addr, header, body)`
+ - `doAfterResponse(self, addr, header, body, respHeader, respBody)`
 
 there is an acl hook provided, usage is:
 ```lua
@@ -132,6 +133,44 @@ there is an acl hook provided, usage is:
 `syntax: p:setUseTLS(useTLS)`
 
 `useTLS` is a boolean
+
+#### registerSendMessageHook
+
+`syntax: p:registerSendMessageHook(hook)`
+
+`hook` is a table that contains two functions as follows:
+  - `sendMessageBefore(self, context)`
+  - `sendMessageAfter(self, context)`
+
+`context` is a table that contains:
+  - producer
+  - producerGroup
+  - communicationMode
+  - bornHost
+  - brokerAddr
+  - message
+  - mq
+  - msgType
+  - sendResult
+  - exception
+
+
+#### registerEndTransactionHook
+
+`syntax: p:registerEndTransactionHook(hook)`
+
+`hook` is a table that contains a function as follows:
+
+  - `endTransaction(self, context)`
+ 
+`context` is a table that contains:
+  - producerGroup
+  - brokerAddr
+  - message
+  - msgId
+  - transactionId
+  - transactionState
+  - fromTransactionCheck
 
 #### produce
 `syntax: res, err = p:produce(topic, message, tags, keys, waitStoreMsgOk)`
@@ -168,9 +207,9 @@ To load this module, just do this
 
 `hook` is a table that contains two functions as follows:
 
-- `doBeforeRequest(addr, header, body)`
+- `doBeforeRequest(self, addr, header, body)`
 
-- `doAfterResponse(addr, header, body, respHeader, respBody)`
+- `doAfterResponse(self, addr, header, body, respHeader, respBody)`
 
 there is an acl hook provided, usage is:
 ```lua

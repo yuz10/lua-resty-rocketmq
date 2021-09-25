@@ -9,6 +9,7 @@ local random = math.random
 local find, sub, append = string.find, string.sub, table.insert
 local byte = string.byte
 local char = string.char
+local floor = math.floor
 
 local _M = {}
 math.randomseed(ngx.now())
@@ -173,6 +174,77 @@ function _M.string2messageProperties(str)
         map[spl[1]] = spl[2]
     end
     return map
+end
+
+local mon_lengths = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+-- Number of days in year until start of month; not corrected for leap years
+local months_to_days_cumulative = { 0 }
+for i = 2, 12 do
+    months_to_days_cumulative[i] = months_to_days_cumulative[i - 1] + mon_lengths[i - 1]
+end
+
+local function is_leap(y)
+    if (y % 4) ~= 0 then
+        return false
+    elseif (y % 100) ~= 0 then
+        return true
+    else
+        return (y % 400) == 0
+    end
+end
+
+local function leap_years_since(year)
+    return floor(year / 4) - floor(year / 100) + floor(year / 400)
+end
+
+local function day_of_year(day, month, year)
+    local yday = months_to_days_cumulative[month]
+    if month > 2 and is_leap(year) then
+        yday = yday + 1
+    end
+    return yday + day
+end
+
+local leap_years_since_1970 = leap_years_since(1970)
+local function timestamp(year, month, day, hour, min, sec)
+    local days_since_epoch = day_of_year(day, month, year)
+            + 365 * (year - 1970)
+            -- Each leap year adds one day
+            + (leap_years_since(year - 1) - leap_years_since_1970) - 1
+
+    return days_since_epoch * (60 * 60 * 24)
+            + hour * (60 * 60)
+            + min * 60
+            + sec
+end
+_M.timestamp = timestamp
+
+do
+    local ip = char(127) .. char(0) .. char(0) .. char(1)
+    local pid = ngx.worker.pid()
+    local pidBin = char(rshift(pid, 8)) .. char(band(pid, 0xff))
+    local clientIdHash = char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255))
+    local counter = 0
+    local tt = os.date("*t")
+    local thisMonth = timestamp(tt.year, tt.month, 0, 0, 0, 0)
+    local nextMonth = timestamp(tt.year, tt.month + 1, 0, 0, 0, 0)
+
+    _M.genUniqId = function()
+        local time = ngx.now()
+        if time >= nextMonth then
+            local tt = os.date("*t", time)
+            thisMonth = timestamp(tt.year, tt.month, 0, 0, 0, 0)
+            nextMonth = timestamp(tt.year, tt.month + 1, 0, 0, 0, 0)
+        end
+        time = (time - thisMonth) * 1000
+        local timeBin = char(band(rshift(time, 24), 0xff)) ..
+                char(band(rshift(time, 16), 0xff)) ..
+                char(band(rshift(time, 8), 0xff)) ..
+                char(band(time, 0xff))
+        counter = counter + 1
+        local counterBin = char(rshift(counter, 8)) .. char(band(counter, 0xff))
+        return bytes2string(ip .. pidBin .. clientIdHash .. timeBin .. counterBin)
+    end
 end
 
 return _M
