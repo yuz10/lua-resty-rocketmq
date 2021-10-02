@@ -225,14 +225,14 @@ do
     local pidBin = char(rshift(pid, 8)) .. char(band(pid, 0xff))
     local clientIdHash = char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255))
     local counter = 0
-    local tt = os.date("*t")
+    local tt = os.date("!*t")
     local thisMonth = timestamp(tt.year, tt.month, 0, 0, 0, 0)
     local nextMonth = timestamp(tt.year, tt.month + 1, 0, 0, 0, 0)
 
     _M.genUniqId = function()
         local time = ngx.now()
         if time >= nextMonth then
-            local tt = os.date("*t", time)
+            local tt = os.date("!*t", time)
             thisMonth = timestamp(tt.year, tt.month, 0, 0, 0, 0)
             nextMonth = timestamp(tt.year, tt.month + 1, 0, 0, 0, 0)
         end
