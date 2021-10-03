@@ -225,16 +225,17 @@ do
     local pidBin = char(rshift(pid, 8)) .. char(band(pid, 0xff))
     local clientIdHash = char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255))
     local counter = 0
+    local timeDiffEightHours =  8 * 60 * 60
     local tt = os.date("!*t")
-    local thisMonth = timestamp(tt.year, tt.month, 0, 0, 0, 0)
-    local nextMonth = timestamp(tt.year, tt.month + 1, 0, 0, 0, 0)
+    local thisMonth = timestamp(tt.year, tt.month, 1, 0, 0, 0) - timeDiffEightHours
+    local nextMonth = timestamp(tt.year, tt.month + 1, 1, 0, 0, 0) - timeDiffEightHours
 
     _M.genUniqId = function()
         local time = ngx.now()
         if time >= nextMonth then
             local tt = os.date("!*t", time)
-            thisMonth = timestamp(tt.year, tt.month, 0, 0, 0, 0)
-            nextMonth = timestamp(tt.year, tt.month + 1, 0, 0, 0, 0)
+            thisMonth = timestamp(tt.year, tt.month, 1, 0, 0, 0) - timeDiffEightHours
+            nextMonth = timestamp(tt.year, tt.month + 1, 1, 0, 0, 0) - timeDiffEightHours
         end
         time = (time - thisMonth) * 1000
         local timeBin = char(band(rshift(time, 24), 0xff)) ..
