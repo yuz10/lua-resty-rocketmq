@@ -1,5 +1,6 @@
 local queue = require("resty.rocketmq.queue")
 local core = require("resty.rocketmq.core")
+local utils = require("resty.rocketmq.utils")
 
 local _M = {}
 _M.__index = _M
@@ -34,8 +35,8 @@ function produceHook.sendMessageBefore(self, context)
         traceType = _M.Pub,
         groupName = context.producerGroup,
         topic = context.message.topic,
-        tags = context.message.tags or '',
-        keys = context.message.keys or '',
+        tags = context.message.properties.TAGS or '',
+        keys = context.message.properties.KEYS or '',
         storeHost = context.brokerAddr,
         bodyLength = #context.message.body,
         msgType = context.msgType,
@@ -62,8 +63,8 @@ function produceHook.endTransaction(self, context)
         traceType = _M.EndTransaction,
         groupName = context.producerGroup,
         topic = context.message.topic,
-        tags = context.message.tags or '',
-        keys = context.message.keys or '',
+        tags = context.message.properties.TAGS or '',
+        keys = context.message.properties.KEYS or '',
         storeHost = context.brokerAddr,
         msgType = core.Trans_msg_Commit,
         msgId = context.msgId,
@@ -120,8 +121,16 @@ local function encoderFromContextBean(ctx)
             tostring(ctx.fromTransactionCheck)
         }, CONTENT_SPLITOR) .. FIELD_SPLITOR
     end
+    local keySet = {}
+    local keys = utils.split(ctx.keys, ' ')
+    for _, k in ipairs(keys) do
+        if k ~= '' then
+            keySet[k] = true
+        end
+    end
+    keySet[ctx.msgId] = true
     return {
-        key = { ctx.msgId, ctx.keys }, data = data
+        key = keySet, data = data
     }
 end
 
@@ -157,10 +166,8 @@ local function sendTrace(self)
             local keySet = {}
             local len = 0
             for _, trans in ipairs(transList) do
-                for _, key in ipairs(trans.key) do
-                    if key ~= '' then
-                        keySet[key] = true
-                    end
+                for key in pairs(trans.key) do
+                    keySet[key] = true
                 end
                 table.insert(buffer, trans.data)
                 len = len + #trans.data
