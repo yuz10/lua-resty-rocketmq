@@ -12,6 +12,7 @@ all: ;
 install: all
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/resty/rocketmq
 	$(INSTALL) lib/resty/rocketmq/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/resty/rocketmq
+	$(INSTALL) lib/resty/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/resty
 
 test: all
 	PATH=$(OPENRESTY_PREFIX)/nginx/sbin:$$PATH prove -I ./../test-nginx/lib -r t/
