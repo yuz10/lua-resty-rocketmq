@@ -18,7 +18,9 @@ Table of Contents
             * [setUseTLS](#setUseTLS)
             * [registerSendMessageHook](#registerSendMessageHook)
             * [registerEndTransactionHook](#registerEndTransactionHook)
+            * [start](#start)
             * [produce](#produce)
+            * [stop](#stop)
     * [resty.rocketmq.admin](#restyrocketmqadmin)
       * [Methods](#methods)
           * [new](#new-1)
@@ -174,11 +176,20 @@ there is an acl hook provided, usage is:
   - transactionState
   - fromTransactionCheck
 
+#### start
+`syntax: p:start()`
+
+note that if you don't call p:start() before sending messages, messages will be sent successfully, but the trace is not send.
+
+
 #### produce
 `syntax: res, err = p:produce(topic, message, tags, keys, waitStoreMsgOk)`
 
   In case of success, returns the a table of results.
   In case of errors, returns `nil` with a string describing the error.
+
+#### stop
+`syntax: p:stop()`
 
 
 [Back to TOC](#table-of-contents)

@@ -33,7 +33,10 @@ jobs:
 
       - name: run rocketmq
         run: |
-          cd ~/rocketmq-all-${ROCEKTMQ_VER}-bin-release/
+          cd ~/rocketmq-${ROCEKTMQ_VER}/
+          echo "traceTopicEnable=true" >> conf/dledger/broker-n0.conf
+          echo "traceTopicEnable=true" >> conf/dledger/broker-n1.conf
+          echo "traceTopicEnable=true" >> conf/dledger/broker-n2.conf
           bin/dledger/fast-try.sh start
 
       - name: download openresty
