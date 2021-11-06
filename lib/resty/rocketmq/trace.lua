@@ -16,7 +16,6 @@ _M.SubAfter = "SubAfter"
 _M.EndTransaction = "EndTransaction"
 local CONTENT_SPLITOR = string.char(1)
 local FIELD_SPLITOR = string.char(2)
-local TRACE_TOPIC = "RMQ_SYS_TRACE_TOPIC"
 
 function _M.new(nameservers, type)
     local producer = require("resty.rocketmq.producer")
@@ -134,12 +133,91 @@ local function encoderFromContextBean(ctx)
     }
 end
 
+function _M.decoderFromTraceDataString(traceData)
+    local contextList = utils.split(traceData, FIELD_SPLITOR)
+    local resList = {}
+    for _, context in ipairs(contextList) do
+        local line = utils.split(context, CONTENT_SPLITOR)
+        if line[1] == _M.Pub then
+            local pubContext = {
+                traceType = _M.Pub,
+                timeStamp = tonumber(line[2]),
+                regionId = line[3],
+                groupName = line[4],
+                topic = line[5],
+                msgId = line[6],
+                tags = line[7],
+                keys = line[8],
+                storeHost = line[9],
+                bodyLength = line[10],
+                costTime = line[11],
+                msgType = core.msgType[tonumber(line[12])],
+            }
+            if #line == 13 then
+                pubContext.success = line[13] == 'true'
+            else
+                pubContext.offsetMsgId = line[13]
+                pubContext.success = line[14] == 'true'
+                if #line >= 15 then
+                    pubContext.clientHost = line[15]
+                end
+            end
+            table.insert(resList, pubContext)
+        elseif line[1] == _M.SubBefore then
+            table.insert(resList, {
+                traceType = _M.SubBefore,
+                timeStamp = tonumber(line[2]),
+                regionId = line[3],
+                groupName = line[4],
+                requestId = line[5],
+                msgId = line[6],
+                retryTimes = tonumber(line[7]),
+                keys = line[8],
+            })
+        elseif line[1] == _M.SubAfter then
+            local subAfterContext = {
+                traceType = _M.SubAfter,
+                requestId = tonumber(line[2]),
+                msgId = line[3],
+                costTime = line[4],
+                success = line[5],
+                keys = line[6],
+            }
+            if #line >= 7 then
+                subAfterContext.contextCode = tonumber(line[7])
+            end
+            if #line >= 9 then
+                subAfterContext.timeStamp = line[8]
+                subAfterContext.groupName = line[9]
+            end
+            table.insert(resList, subAfterContext)
+        elseif line[1] == _M.EndTransaction then
+            table.insert(resList, {
+                TraceType = _M.EndTransaction,
+                TimeStamp = tonumber(line[2]),
+                RegionId = line[3],
+                GroupName = line[4],
+                Topic = line[5],
+                MsgId = line[6],
+                Tags = line[7],
+                Keys = line[8],
+                StoreHost = line[9],
+                MsgType = core.msgType[tonumber(line[10])],
+                TransactionId = line[11],
+                TransactionState = line[12],
+                FromTransactionCheck = line[13] == 'true',
+            })
+        end
+    end
+    return resList
+end
+
 local function sendTraceDataByMQ(self, keySet, data, topic)
     local keys = {}
     for k in pairs(keySet) do
         table.insert(keys, k)
     end
-    local res, err = self.producer:produce(TRACE_TOPIC, data, "", table.concat(keys, ' '))
+    local res, err = self.producer:produce(core.RMQ_SYS_TRACE_TOPIC, data, "", table.concat(keys, ' '))
     if err then
         ngx.log(ngx.WARN, 'send msg trace fail, ', err)
     end

@@ -1,6 +1,7 @@
 local core = require("resty.rocketmq.core")
 local client = require("resty.rocketmq.client")
 local utils = require("resty.rocketmq.utils")
+local decoderFromTraceDataString = require("resty.rocketmq.trace").decoderFromTraceDataString
 local bit = require("bit")
 local cjson_safe = require("cjson.safe")
 local decode = require("resty.rocketmq.json").decode
@@ -167,6 +168,66 @@ function _M.viewMessage(self, offsetMsgId)
         return nil, err
     end
     return core.decodeMsg(body, true, true)
+end
+
+function _M.queryMessage(self, topic, key, maxNum, beginTime, endTime, isUniqKey)
+    local publishInfo, err = self.client:tryToFindTopicPublishInfo(topic)
+    if err then
+        return nil, err
+    end
+    local topicRouteData = publishInfo.topicRouteData
+    local allBrokerAddrs = {}
+    for _, brokerDatas in ipairs(topicRouteData.brokerDatas) do
+        local brokerAddrs = brokerDatas.brokerAddrs
+        local addr = brokerAddrs[0] or next(brokerAddrs)
+        if addr then
+            table.insert(allBrokerAddrs, addr)
+        end
+    end
+    if #allBrokerAddrs == 0 then
+        return nil, "The topic[" .. topic .. "] not matched route info"
+    end
+    local threads = {}
+    for i, brokerAddr in ipairs(allBrokerAddrs) do
+        threads[i] = ngx.thread.spawn(function()
+            return self.client:request(REQUEST_CODE.QUERY_MESSAGE, brokerAddr, {
+                topic = topic,
+                key = key,
+                maxNum = maxNum,
+                beginTimestamp = beginTime,
+                endTimestamp = endTime,
+                _UNIQUE_KEY_QUERY = tostring(isUniqKey)
+            })
+        end, brokerAddr)
+    end
+    local msgs = {}
+    for i, thread in ipairs(threads) do
+        local ok, res, body, err = ngx.thread.wait(thread)
+        if not ok then
+            ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', res)
+        elseif not res then
+            ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', err)
+        elseif res.code == core.RESPONSE_CODE.SUCCESS then
+            core.decodeMsgs(msgs, body, true, true)
+        else
+            ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', core.RESPONSE_CODE_NAME[res.code], ' remark:', core.remark)
+        end
+    end
+    return msgs
+end
+
+function _M.queryTraceByMsgId(self, traceTopic, msgId)
+    local msgs = self:queryMessage(traceTopic or core.RMQ_SYS_TRACE_TOPIC, msgId, 64, 0, ngx.now() * 1000)
+    local trace = {}
+    for _, msg in ipairs(msgs) do
+        local ctxList = decoderFromTraceDataString(msg.body)
+        for _, ctx in ipairs(ctxList) do
+            if ctx.msgId == msgId then
+                table.insert(trace, ctx)
+            end
+        end
+    end
+    return trace
 end
 
 return _M

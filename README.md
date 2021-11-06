@@ -31,6 +31,8 @@ Table of Contents
           * [minOffset](#minOffset)
           * [earliestMsgStoreTime](#earliestMsgStoreTime)
           * [viewMessage](#viewMessage)
+          * [queryMessage](#queryMessage)
+          * [queryTraceByMsgId](#queryTraceByMsgId)
 * [Installation](#installation)
 * [See Also](#see-also)
 
@@ -284,6 +286,11 @@ there is an acl hook provided, usage is:
 #### viewMessage
 `syntax: res, err = adm:viewMessage(offsetMsgId)`
 
+#### queryMessage
+`syntax: res, err = adm:queryMessage(topic, key, maxNum, beginTime, endTime, isUniqKey)`
+
+#### queryTraceByMsgId
+`syntax: res, err = adm:queryTraceByMsgId(traceTopic, msgId)`
 
 [Back to TOC](#table-of-contents)
 

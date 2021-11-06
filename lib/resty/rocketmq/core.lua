@@ -30,6 +30,7 @@ local SYSTEM_TOPIC_SET = {
     SELF_TEST_TOPIC = true,
     OFFSET_MOVED_EVENT = true,
 }
+_M.RMQ_SYS_TRACE_TOPIC = "RMQ_SYS_TRACE_TOPIC"
 
 local REQUEST_CODE = {
     SEND_MESSAGE = 10,
@@ -207,6 +208,13 @@ _M.Normal_Msg = 0
 _M.Trans_Msg_Half = 1
 _M.Trans_msg_Commit = 2
 _M.Delay_Msg = 3
+_M.msgType = {
+    [0] = "Normal_Msg",
+    [1] = "Trans_Msg_Half",
+    [2] = "Trans_msg_Commit",
+    [3] = "Delay_Msg",
+}
+
 _M.maxMessageSize = 1024 * 1024 * 4
 
 local VALID_PATTERN_STR = "^[%|a-zA-Z0-9_-]+$"
@@ -345,9 +353,8 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS)
 end
 _M.request = request
 
-function _M.decodeMsg(buffer, readBody, isClient)
+local function decodeMsg(buffer, offset, readBody, isClient)
     local msgExt = {}
-    local offset = 1
     local _
     msgExt.storeSize, offset = getInt(buffer, offset)
     _, offset = getInt(buffer, offset) --MAGICCODE
@@ -388,13 +395,26 @@ function _M.decodeMsg(buffer, readBody, isClient)
 
     propertiesLength, offset = getShort(buffer, offset)
     msgExt.properties = utils.string2messageProperties(string.sub(buffer, offset, offset + propertiesLength - 1))
-
+    offset = offset + propertiesLength
     msgExt.msgId = utils.createMessageId(storeHostIp, storeHostPort, msgExt.commitLogOffset)
 
     if isClient then
         msgExt.offsetMsgId = msgExt.msgId
     end
-    return msgExt
+    return msgExt, offset
+end
+
+_M.decodeMsg = function(buffer, readBody, isClient)
+    return decodeMsg(buffer, 1, readBody, isClient)
+end
+
+_M.decodeMsgs = function(msgs, buffer, readBody, isClient)
+    local offset = 1
+    while offset < #buffer do
+        local msg
+        msg, offset = decodeMsg(buffer, offset, readBody, isClient)
+        table.insert(msgs, msg)
+    end
 end
 
 return _M

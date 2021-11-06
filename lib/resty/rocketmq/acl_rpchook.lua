@@ -17,7 +17,7 @@ function _M.doBeforeRequest(self, addr, header, body)
     header.SecurityToken = self.securityToken
     local keys = {}
     for k, v in pairs(header) do
-        if k ~= 'Signature' then
+        if k ~= 'Signature' and k ~= '_UNIQUE_KEY_QUERY' then
             table.insert(keys, k)
         end
     end
