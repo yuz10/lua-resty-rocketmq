@@ -18,8 +18,9 @@ Table of Contents
             * [setUseTLS](#setUseTLS)
             * [registerSendMessageHook](#registerSendMessageHook)
             * [registerEndTransactionHook](#registerEndTransactionHook)
+            * [send](#send)
+            * [sendMessageInTransaction](#sendMessageInTransaction)
             * [start](#start)
-            * [produce](#produce)
             * [stop](#stop)
     * [resty.rocketmq.admin](#restyrocketmqadmin)
       * [Methods](#methods)
@@ -78,7 +79,7 @@ Synopsis
                 -- use tls mode
                 p:setUseTLS(true)
                 
-                local res, err = p:produce("TopicTest", message)
+                local res, err = p:send("TopicTest", message)
                 if not res then
                     ngx.say("send err:", err)
                     return
@@ -176,17 +177,28 @@ there is an acl hook provided, usage is:
   - transactionState
   - fromTransactionCheck
 
+
+#### send
+`syntax: res, err = p:send(topic, message, tags, keys, waitStoreMsgOk)`
+
+  In case of success, returns the a table of results.
+  In case of errors, returns `nil` with a string describing the error.
+
+#### setTransactionListener
+`syntax: res, err = p:setTransactionListener(transactionListener)`
+
+`transactionListener` is a table that contains two functions as follows:
+
+- `executeLocalTransaction(self, msg, arg)`
+- `checkLocalTransaction(self, msg)`
+
+#### sendMessageInTransaction
+`syntax: res, err = p:sendMessageInTransaction(topic, arg, message, tags, keys, waitStoreMsgOk)`
+
 #### start
 `syntax: p:start()`
 
 note that if you don't call p:start() before sending messages, messages will be sent successfully, but the trace is not send.
-
-
-#### produce
-`syntax: res, err = p:produce(topic, message, tags, keys, waitStoreMsgOk)`
-
-  In case of success, returns the a table of results.
-  In case of errors, returns `nil` with a string describing the error.
 
 #### stop
 `syntax: p:stop()`

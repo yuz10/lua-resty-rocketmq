@@ -3,6 +3,7 @@ local client = require("resty.rocketmq.client")
 local utils = require("resty.rocketmq.utils")
 local trace = require("resty.rocketmq.trace")
 local RESPONSE_CODE = core.RESPONSE_CODE
+local cjson_safe = require("cjson.safe")
 
 ---@class producer
 local _M = {}
@@ -69,16 +70,7 @@ local function sendHeartbeatToAllBroker(self)
     local heartbeatData = {
         clientID = '' .. ngx.worker.pid(),
         producerDataSet = { { groupName = self.groupName } },
-        consumerDataSet = {
-            {
-                groupName = self.groupName,
-                consumerType = self.groupName,
-                messageModel = self.groupName,
-                consumerFromWhere = self.groupName,
-                subscriptionDataSet = self.groupName,
-                unitMode = self.groupName,
-            }
-        }
+        consumerDataSet = setmetatable({}, cjson_safe.empty_array_mt)
     }
     for brokerName, brokers in pairs(self.client.brokerAddrTable) do
         local addr = brokers[0]
@@ -186,7 +178,7 @@ local function produce(self, msg)
     return h
 end
 
-function _M:produce(topic, message, tags, keys, waitStoreMsgOk)
+function _M:send(topic, message, tags, keys, waitStoreMsgOk)
     return produce(self, {
         producerGroup = self.groupName,
         topic = topic,
@@ -209,11 +201,18 @@ function _M:produce(topic, message, tags, keys, waitStoreMsgOk)
     })
 end
 
+function _M:setTransactionListener(transactionListener)
+    if type(transactionListener.executeLocalTransaction) ~= 'function' then
+        return nil, 'invalid callback'
+    end
+    self.transactionListener = transactionListener
+end
+
 
 -- todo add check callback
-function _M:transactionProduce(topic, execute, arg, message, tags, keys, waitStoreMsgOk)
-    if type(execute) ~= 'function' then
-        return nil, 'invalid callback'
+function _M:sendMessageInTransaction(topic, arg, message, tags, keys, waitStoreMsgOk)
+    if not self.transactionListener then
+        return nil, "TransactionListener is null"
     end
     local msg = {
         producerGroup = self.groupName,
@@ -245,7 +244,7 @@ function _M:transactionProduce(topic, execute, arg, message, tags, keys, waitSto
     if h.code == RESPONSE_CODE.SUCCESS then
         msg.properties.__transationId__ = h.transationId
         msg.transationId = msg.properties.UNIQ_KEY
-        localTransactionState = execute(msg, arg)
+        localTransactionState = self.transactionListener:executeLocalTransaction(msg, arg)
     else
         localTransactionState = core.TRANSACTION_ROLLBACK_TYPE
     end

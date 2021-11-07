@@ -65,7 +65,7 @@ ok
                 return
             end
 
-            local res, err = p:produce("TopicTest", message)
+            local res, err = p:send("TopicTest", message)
             if not res then
                 ngx.say("send err:", err)
                 return

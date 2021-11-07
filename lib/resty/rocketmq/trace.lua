@@ -217,7 +217,7 @@ local function sendTraceDataByMQ(self, keySet, data, topic)
     for k in pairs(keySet) do
         table.insert(keys, k)
     end
-    local res, err = self.producer:produce(core.RMQ_SYS_TRACE_TOPIC, data, "", table.concat(keys, ' '))
+    local res, err = self.producer:send(core.RMQ_SYS_TRACE_TOPIC, data, "", table.concat(keys, ' '))
     if err then
         ngx.log(ngx.WARN, 'send msg trace fail, ', err)
     end

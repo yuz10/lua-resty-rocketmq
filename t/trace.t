@@ -42,7 +42,7 @@ __DATA__
                 return
             end
             p:start()
-            local res, err = p:produce("TopicTest", "halo world", "tags", "keys")
+            local res, err = p:send("TopicTest", "halo world", "tags", "keys")
             if not res then
                 ngx.say("send err:", err)
                 return
