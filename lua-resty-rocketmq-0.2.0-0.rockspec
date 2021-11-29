@@ -1,7 +1,7 @@
 package = "lua-resty-rocketmq"
 version = "0.2.0-0"
 source = {
-   url = "https://github.com/yuz10/lua-resty-rocketmq.git",
+   url = "git://github.com/yuz10/lua-resty-rocketmq.git",
    tag = "0.2.0"
 }
 description = {
