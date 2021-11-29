@@ -1,5 +1,5 @@
 package = "lua-resty-rocketmq"
-version = "0.2.0"
+version = "0.2.0-0"
 source = {
    url = "git://github.com/yuz10/lua-resty-rocketmq",
    tag = "0.2.0"
