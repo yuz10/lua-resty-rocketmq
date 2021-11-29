@@ -1,7 +1,7 @@
 package = "lua-resty-rocketmq"
 version = "0.2.0-0"
 source = {
-   url = "git://github.com/yuz10/lua-resty-rocketmq",
+   url = "https://github.com/yuz10/lua-resty-rocketmq.git",
    tag = "0.2.0"
 }
 description = {
@@ -16,7 +16,8 @@ description = {
    license = "BSD"
 }
 dependencies = {
-   "lua >= 5.1"
+   "lua >= 5.1",
+   "lua-resty-hmac >= v1.0-1",
 }
 build = {
    type = "builtin",
@@ -30,6 +31,5 @@ build = {
       ["resty.rocketmq.queue"] = "lib/resty/rocketmq/queue.lua",
       ["resty.rocketmq.trace"] = "lib/resty/rocketmq/trace.lua",
       ["resty.rocketmq.utils"] = "lib/resty/rocketmq/utils.lua",
-      ["resty.hmac"] = "lib/resty/hmac.lua"
    }
 }
