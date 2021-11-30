@@ -34,6 +34,7 @@ function _M.new(nameservers)
         current_nameserver = 1,
         RPCHook = {},
         useTLS = false,
+        timeout = 3000,
 
         topicPublishInfoTable = {},
         brokerAddrTable = {},
@@ -52,8 +53,12 @@ function _M.setUseTLS(self, useTLS)
     self.useTLS = useTLS
 end
 
+function _M.setTimeout(self, timeout)
+    self.timeout = timeout
+end
+
 function _M:request(code, addr, header, body, oneway)
-    return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS)
+    return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS, self.timeout)
 end
 
 function _M:chooseNameserver()

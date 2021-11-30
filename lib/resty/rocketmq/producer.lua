@@ -43,6 +43,13 @@ function _M.setUseTLS(self, useTLS)
     end
 end
 
+function _M.setTimeout(self, timeout)
+    self.client:setTimeout(timeout)
+    if self.traceDispatcher then
+        self.traceDispatcher.producer:setTimeout(timeout)
+    end
+end
+
 function _M.registerSendMessageHook(self, hook)
     if type(hook) == 'table' and type(hook.sendMessageBefore) == 'function' and type(hook.sendMessageAfter) == 'function' then
         table.insert(self.sendMessageHookList, hook)

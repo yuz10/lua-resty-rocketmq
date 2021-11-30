@@ -16,6 +16,7 @@ Table of Contents
             * [new](#new)
             * [addRPCHook](#addRPCHook)
             * [setUseTLS](#setUseTLS)
+            * [setTimeout](#setTimeout)
             * [registerSendMessageHook](#registerSendMessageHook)
             * [registerEndTransactionHook](#registerEndTransactionHook)
             * [send](#send)
@@ -27,6 +28,7 @@ Table of Contents
           * [new](#new-1)
           * [addRPCHook](#addRPCHook-1)
           * [setUseTLS](#setUseTLS-1)
+          * [setTimeout](#setTimeout-1)
           * [createTopic](#createTopic)
           * [createTopicForBroker](#createTopicForBroker)
           * [searchOffset](#searchOffset)
@@ -139,6 +141,12 @@ there is an acl hook provided, usage is:
 
 `useTLS` is a boolean
 
+#### setTimeout
+
+`syntax: p:setTimeout(timeout)`
+
+`timeout` is in milliseconds, default 3000
+
 #### registerSendMessageHook
 
 `syntax: p:registerSendMessageHook(hook)`
@@ -248,6 +256,12 @@ there is an acl hook provided, usage is:
 `syntax: adm:setUseTLS(useTLS)`
 
 `useTLS` is a boolean
+
+#### setTimeout
+
+`syntax: p:setTimeout(timeout)`
+
+`timeout` is in milliseconds, default 3000
 
 #### createTopic
 `syntax: res, err = adm:createTopic(defaultTopic, newTopic, queueNum, topicSysFlag)`

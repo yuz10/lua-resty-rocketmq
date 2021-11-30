@@ -290,8 +290,9 @@ local function getLong(buffer, offset)
     return lshift(res1, 32) + res2, offset
 end
 
-local function doReqeust(ip, port, send, oneway, useTLS)
+local function doReqeust(ip, port, send, oneway, useTLS, timeout)
     local sock = ngx_socket_tcp()
+    sock:settimeout(timeout)
     local res, err = sock:connect(ip, port)
     if not res then
         return nil, nil, ('connect %s:%s fail:%s'):format(ip, port, err)
@@ -328,7 +329,7 @@ local function doReqeust(ip, port, send, oneway, useTLS)
 end
 _M.doReqeust = doReqeust
 
-local function request(code, addr, header, body, oneway, RPCHook, useTLS)
+local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeout)
     if RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doBeforeRequest(addr, header, body)
@@ -337,7 +338,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS)
     ngx.log(ngx.DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
-    local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS)
+    local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS, timeout)
     if err then
         return nil, nil, err
     end

@@ -30,6 +30,10 @@ function _M.setUseTLS(self, useTLS)
     self.client:setUseTLS(useTLS)
 end
 
+function _M.setTimeout(self, timeout)
+    self.client:setTimeout(timeout)
+end
+
 function _M.createTopic(self, defaultTopic, newTopic, queueNum, topicSysFlag)
     if not core.checkTopic(newTopic) then
         return nil, ('topic %s invalid format'):format(newTopic)
