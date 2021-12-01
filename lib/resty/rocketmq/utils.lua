@@ -226,9 +226,8 @@ do
     local clientIdHash = char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255))
     local counter = 0
     local timeDiffEightHours =  8 * 60 * 60
-    local today = split(ngx.today(), "-")
-    local thisMonth = timestamp(tonumber(today[1]), tonumber(today[2]), 1, 0, 0, 0) - timeDiffEightHours
-    local nextMonth = timestamp(tonumber(today[1]), tonumber(today[2]) + 1, 1, 0, 0, 0) - timeDiffEightHours
+    local thisMonth = 0
+    local nextMonth = 0
 
     _M.genUniqId = function()
         local time = ngx.now()
