@@ -198,7 +198,6 @@ local function leap_years_since(year)
 end
 
 local function day_of_year(day, month, year)
-    ngx.log(ngx.WARN, month,'--', type(month))
     local yday = months_to_days_cumulative[month]
     if month > 2 and is_leap(year) then
         yday = yday + 1
