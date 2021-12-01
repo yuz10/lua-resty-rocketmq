@@ -227,15 +227,15 @@ do
     local counter = 0
     local timeDiffEightHours =  8 * 60 * 60
     local today = split(ngx.today(), "-")
-    local thisMonth = timestamp(today[1], today[2], 1, 0, 0, 0) - timeDiffEightHours
-    local nextMonth = timestamp(today[1], today[2] + 1, 1, 0, 0, 0) - timeDiffEightHours
+    local thisMonth = timestamp(tonumber(today[1]), tonumber(today[2]), 1, 0, 0, 0) - timeDiffEightHours
+    local nextMonth = timestamp(tonumber(today[1]), tonumber(today[2]) + 1, 1, 0, 0, 0) - timeDiffEightHours
 
     _M.genUniqId = function()
         local time = ngx.now()
         if time >= nextMonth then
             local today = split(ngx.today(), "-")
-            thisMonth = timestamp(today[1], today[2], 1, 0, 0, 0) - timeDiffEightHours
-            nextMonth = timestamp(today[1], today[2] + 1, 1, 0, 0, 0) - timeDiffEightHours
+            thisMonth = timestamp(tonumber(today[1]), tonumber(today[2]), 1, 0, 0, 0) - timeDiffEightHours
+            nextMonth = timestamp(tonumber(today[1]), tonumber(today[2]) + 1, 1, 0, 0, 0) - timeDiffEightHours
         end
         time = (time - thisMonth) * 1000
         local timeBin = char(band(rshift(time, 24), 0xff)) ..
