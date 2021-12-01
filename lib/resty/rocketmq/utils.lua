@@ -234,8 +234,14 @@ do
         local time = ngx.now()
         if time >= nextMonth then
             local today = split(ngx.today(), "-")
-            thisMonth = timestamp(tonumber(today[1]), tonumber(today[2]), 1, 0, 0, 0) - timeDiffEightHours
-            nextMonth = timestamp(tonumber(today[1]), tonumber(today[2]) + 1, 1, 0, 0, 0) - timeDiffEightHours
+            local y, m = tonumber(today[1]), tonumber(today[2])
+            local y2, m2 = y, m + 1
+            if m2 > 12 then
+                m2 = 1 
+                y2 = y2 + 1
+            end
+            thisMonth = timestamp(y, m, 1, 0, 0, 0) - timeDiffEightHours
+            nextMonth = timestamp(y2, m2, 1, 0, 0, 0) - timeDiffEightHours
         end
         time = (time - thisMonth) * 1000
         local timeBin = char(band(rshift(time, 24), 0xff)) ..
