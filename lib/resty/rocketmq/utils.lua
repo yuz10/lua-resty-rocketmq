@@ -222,7 +222,7 @@ _M.timestamp = timestamp
 do
     local ip = char(127) .. char(0) .. char(0) .. char(1)
     local pid = ngx.worker.pid()
-    local pidBin = char(rshift(pid, 8)) .. char(band(pid, 0xff))
+    local pidBin = char(band(rshift(pid, 8), 0xff)) .. char(band(pid, 0xff))
     local clientIdHash = char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255))
     local counter = 0
     local timeDiffEightHours =  8 * 60 * 60
