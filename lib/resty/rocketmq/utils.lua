@@ -12,7 +12,7 @@ local char = string.char
 local floor = math.floor
 
 local _M = {}
-math.randomseed(ngx.now())
+math.randomseed(ngx.now() + ngx.worker.id())
 
 -- https://github.com/thibaultcha/lua-resty-jit-uuid/blob/master/lib/resty/jit-uuid.lua
 function _M.uuid()
