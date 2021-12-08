@@ -1,8 +1,8 @@
 package = "lua-resty-rocketmq"
-version = "0.2.1-2"
+version = "0.2.1-3"
 source = {
    url = "git://github.com/yuz10/lua-resty-rocketmq.git",
-   tag = "0.2.1-2"
+   tag = "0.2.1-3"
 }
 description = {
    summary = "Lua RocketMQ client driver for the ngx_lua based on the cosocket API",
