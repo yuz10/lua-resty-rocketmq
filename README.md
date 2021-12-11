@@ -21,6 +21,7 @@ Table of Contents
             * [registerEndTransactionHook](#registerEndTransactionHook)
             * [send](#send)
             * [sendMessageInTransaction](#sendMessageInTransaction)
+            * [batchSend](#batchSend)
             * [start](#start)
             * [stop](#stop)
     * [resty.rocketmq.admin](#restyrocketmqadmin)
@@ -206,6 +207,17 @@ there is an acl hook provided, usage is:
 
 #### sendMessageInTransaction
 `syntax: res, err = p:sendMessageInTransaction(topic, arg, message, tags, keys, properties)`
+
+#### batchSend
+`syntax: res, err = p:batchSend(msgs)`
+
+`msgs` is a list of msgs, each msg is a table that contains:
+
+- topic
+- body
+- tags
+- keys
+- properties
 
 #### start
 `syntax: p:start()`

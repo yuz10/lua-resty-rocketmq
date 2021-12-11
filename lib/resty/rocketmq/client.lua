@@ -76,13 +76,6 @@ function _M:getTopicRouteInfoFromNameserver(topic)
     return self:request(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, addr, { topic = topic }, nil, false)
 end
 
-local function messageProperties2String(properties)
-    local res = {}
-    for k, v in pairs(properties) do
-        table.insert(res, k .. char(1) .. v .. char(2))
-    end
-    return concat(res, '')
-end
 
 function _M:sendMessage(brokerAddr, msg)
     return self:request(REQUEST_CODE.SEND_MESSAGE_V2, brokerAddr, {
@@ -94,7 +87,7 @@ function _M:sendMessage(brokerAddr, msg)
         f = msg.sysFlag,
         g = msg.bornTimeStamp,
         h = msg.flag,
-        i = messageProperties2String(msg.properties),
+        i = core.messageProperties2String(msg.properties),
         j = msg.reconsumeTimes,
         k = msg.unitMode,
         l = msg.maxReconsumeTimes,

@@ -290,6 +290,18 @@ local function getLong(buffer, offset)
     return lshift(res1, 32) + res2, offset
 end
 
+local function intToBin(n)
+    return char(band(rshift(n, 24), 0xff)) ..
+            char(band(rshift(n, 16), 0xff)) ..
+            char(band(rshift(n, 8), 0xff)) ..
+            char(band(n, 0xff))
+end
+
+local function shortToBin(n)
+    return char(band(rshift(n, 8), 0xff)) ..
+            char(band(n, 0xff))
+end
+
 local function doReqeust(ip, port, send, oneway, useTLS, timeout)
     local sock = ngx_socket_tcp()
     sock:settimeout(timeout)
@@ -417,5 +429,33 @@ _M.decodeMsgs = function(msgs, buffer, readBody, isClient)
         table.insert(msgs, msg)
     end
 end
+
+local function messageProperties2String(properties)
+    local res = {}
+    for k, v in pairs(properties) do
+        table.insert(res, k .. char(1) .. v .. char(2))
+    end
+    return concat(res, '')
+end
+_M.messageProperties2String = messageProperties2String
+
+local function encodeMsg(msg)
+    local properties = messageProperties2String(msg.properties);
+    local storeSize = 4 -- 1 TOTALSIZE
+            + 4 -- 2 MAGICCOD
+            + 4 -- 3 BODYCRC
+            + 4 -- 4 FLAG
+            + 4 + #msg.body -- 5 BODY
+            + 2 + #properties;
+    return table.concat({
+        intToBin(storeSize), -- 1 TOTALSIZE
+        intToBin(0), -- 2 MAGICCOD
+        intToBin(0), -- 3 BODYCRC
+        intToBin(msg.flag), -- 4 FLAG
+        intToBin(#msg.body), msg.body, -- 5 BODY
+        shortToBin(#properties), properties, -- 6 properties
+    })
+end
+_M.encodeMsg = encodeMsg
 
 return _M

@@ -185,10 +185,10 @@ local function produce(self, msg)
     return h
 end
 
-local function genMsg(topic, message, tags, keys, properties)
+local function genMsg(groupName, topic, message, tags, keys, properties)
     properties = properties or {}
     return {
-        producerGroup = self.groupName,
+        producerGroup = groupName,
         topic = topic,
         defaultTopic = "TBW102",
         defaultTopicQueueNums = 4,
@@ -211,7 +211,7 @@ local function genMsg(topic, message, tags, keys, properties)
 end
 
 function _M:send(topic, message, tags, keys, properties)
-    return produce(self, genMsg(topic, message, tags, keys, properties))
+    return produce(self, genMsg(self.groupName, topic, message, tags, keys, properties))
 end
 
 function _M:setTransactionListener(transactionListener)
@@ -227,7 +227,7 @@ function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties
     if not self.transactionListener then
         return nil, "TransactionListener is null"
     end
-    local msg = genMsg(topic, message, tags, keys, properties)
+    local msg = genMsg(self.groupName, topic, message, tags, keys, properties)
     msg.properties.TRANS_MSG = 'true'
     msg.properties.PGROUP = self.groupName
 
@@ -272,4 +272,51 @@ function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties
     return h
 end
 
+function _M:batchSend(msgs)
+    local first
+    local batch_body = {}
+    for _, m in ipairs(msgs) do
+        if not core.checkTopic(m.topic) or not core.checkMessage(m.body) then
+            return nil, 'invalid topic or message'
+        end
+
+        local msg = genMsg(self.groupName, m.topic, m.body, m.tags, m.keys, m.properties)
+        if msg.properties.DELAY then
+            return nil, 'TimeDelayLevel is not supported for batching'
+        end
+
+        if not first then
+            first = msg
+            if msg.topic:find(core.RETRY_GROUP_TOPIC_PREFIX, nil, true) == 1 then
+                return nil, 'Retry Group is not supported for batching'
+            end
+        else
+            if msg.topic ~= first.topic then
+                return nil, 'The topic of the messages in one batch should be the same'
+            end
+            if msg.properties.WAIT ~= first.properties.WAIT then
+                return nil, 'The waitStoreMsgOK of the messages in one batch should the same'
+            end
+        end
+        table.insert(batch_body, core.encodeMsg(msg))
+    end
+    return produce(self, {
+        producerGroup = self.groupName,
+        topic = first.topic,
+        defaultTopic = "TBW102",
+        defaultTopicQueueNums = 4,
+        sysFlag = 0,
+        bornTimeStamp = ngx.now() * 1000,
+        flag = 0,
+        properties = {
+            UNIQ_KEY = utils.genUniqId(),
+            WAIT = first.waitStoreMsgOk,
+        },
+        reconsumeTimes = 0,
+        unitMode = false,
+        maxReconsumeTimes = 0,
+        batch = true,
+        body = table.concat(batch_body),
+    })
+end
 return _M
