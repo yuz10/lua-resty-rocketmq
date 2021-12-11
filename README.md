@@ -187,7 +187,11 @@ there is an acl hook provided, usage is:
 
 
 #### send
-`syntax: res, err = p:send(topic, message, tags, keys, waitStoreMsgOk)`
+`syntax: res, err = p:send(topic, message, tags, keys, properties)`
+
+`properties` is a table that contains:
+   - waitStoreMsgOk
+   - delayTimeLevel
 
   In case of success, returns the a table of results.
   In case of errors, returns `nil` with a string describing the error.
@@ -201,7 +205,7 @@ there is an acl hook provided, usage is:
 - `checkLocalTransaction(self, msg)`
 
 #### sendMessageInTransaction
-`syntax: res, err = p:sendMessageInTransaction(topic, arg, message, tags, keys, waitStoreMsgOk)`
+`syntax: res, err = p:sendMessageInTransaction(topic, arg, message, tags, keys, properties)`
 
 #### start
 `syntax: p:start()`

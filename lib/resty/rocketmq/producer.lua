@@ -185,7 +185,8 @@ local function produce(self, msg)
     return h
 end
 
-function _M:send(topic, message, tags, keys, waitStoreMsgOk)
+function _M:send(topic, message, tags, keys, properties)
+    properties = properties or {}
     return produce(self, {
         producerGroup = self.groupName,
         topic = topic,
@@ -198,7 +199,8 @@ function _M:send(topic, message, tags, keys, waitStoreMsgOk)
             UNIQ_KEY = utils.genUniqId(),
             KEYS = keys,
             TAGS = tags,
-            WAIT = waitStoreMsgOk or 'true',
+            WAIT = properties.waitStoreMsgOk or 'true',
+            DELAY = properties.delayTimeLevel
         },
         reconsumeTimes = 0,
         unitMode = false,
@@ -217,7 +219,7 @@ end
 
 
 -- todo add check callback
-function _M:sendMessageInTransaction(topic, arg, message, tags, keys, waitStoreMsgOk)
+function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties)
     if not self.transactionListener then
         return nil, "TransactionListener is null"
     end
@@ -233,7 +235,7 @@ function _M:sendMessageInTransaction(topic, arg, message, tags, keys, waitStoreM
             UNIQ_KEY = utils.genUniqId(),
             KEYS = keys,
             TAGS = tags,
-            WAIT = waitStoreMsgOk or 'true',
+            WAIT = properties.waitStoreMsgOk or 'true',
             TRANS_MSG = 'true',
             PGROUP = self.groupName,
         },
