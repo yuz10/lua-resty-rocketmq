@@ -236,7 +236,7 @@ do
             local y, m = tonumber(today[1]), tonumber(today[2])
             local y2, m2 = y, m + 1
             if m2 > 12 then
-                m2 = 1 
+                m2 = 1
                 y2 = y2 + 1
             end
             thisMonth = timestamp(y, m, 1, 0, 0, 0) - timeDiffEightHours
@@ -248,7 +248,7 @@ do
                 char(band(rshift(time, 8), 0xff)) ..
                 char(band(time, 0xff))
         counter = counter + 1
-        local counterBin = char(rshift(counter, 8)) .. char(band(counter, 0xff))
+        local counterBin = char(band(rshift(counter, 8), 0xff)) .. char(band(counter, 0xff))
         return bytes2string(ip .. pidBin .. clientIdHash .. timeBin .. counterBin)
     end
 end
