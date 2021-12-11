@@ -185,9 +185,9 @@ local function produce(self, msg)
     return h
 end
 
-function _M:send(topic, message, tags, keys, properties)
+local function genMsg(topic, message, tags, keys, properties)
     properties = properties or {}
-    return produce(self, {
+    return {
         producerGroup = self.groupName,
         topic = topic,
         defaultTopic = "TBW102",
@@ -200,14 +200,18 @@ function _M:send(topic, message, tags, keys, properties)
             KEYS = keys,
             TAGS = tags,
             WAIT = properties.waitStoreMsgOk or 'true',
-            DELAY = properties.delayTimeLevel
+            DELAY = properties.delayTimeLevel,
         },
         reconsumeTimes = 0,
         unitMode = false,
         maxReconsumeTimes = 0,
         batch = false,
         body = message,
-    })
+    }
+end
+
+function _M:send(topic, message, tags, keys, properties)
+    return produce(self, genMsg(topic, message, tags, keys, properties))
 end
 
 function _M:setTransactionListener(transactionListener)
@@ -223,28 +227,10 @@ function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties
     if not self.transactionListener then
         return nil, "TransactionListener is null"
     end
-    local msg = {
-        producerGroup = self.groupName,
-        topic = topic,
-        defaultTopic = "TBW102",
-        defaultTopicQueueNums = 4,
-        sysFlag = 0,
-        bornTimeStamp = ngx.now() * 1000,
-        flag = 0,
-        properties = {
-            UNIQ_KEY = utils.genUniqId(),
-            KEYS = keys,
-            TAGS = tags,
-            WAIT = properties.waitStoreMsgOk or 'true',
-            TRANS_MSG = 'true',
-            PGROUP = self.groupName,
-        },
-        reconsumeTimes = 0,
-        unitMode = false,
-        maxReconsumeTimes = 0,
-        batch = false,
-        body = message,
-    }
+    local msg = genMsg(topic, message, tags, keys, properties)
+    msg.properties.TRANS_MSG = 'true'
+    msg.properties.PGROUP = self.groupName
+
     local h, err = produce(self, msg)
     if not h then
         return nil, err
