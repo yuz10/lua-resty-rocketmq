@@ -23,7 +23,7 @@ __DATA__
 === TEST 1: produce
 --- http_config eval: $::HttpConfig
 --- config
-    location /send {
+    location /benchmark {
         content_by_lua_block {
             local admin = require "resty.rocketmq.admin"
             local producer = require "resty.rocketmq.producer"
@@ -32,12 +32,17 @@ __DATA__
             adm:createTopic("TBW102", "TopicTest", 8)
 
             local args = ngx.req.get_uri_args()
-            local thread_num = args.thread_num or 4
-            local msg_size = args.msg_size or 120
+            local thread_num = tonumber(args.thread_num) or 4
+            local msg_size = tonumber(args.msg_size) or 120
             local topic = args.topic or "TopicTest"
-            local trace_enable = args.trace_enable or false
+            local trace_enable = args.trace_enable == 'true'
             local delay_level = args.delay_level
-            local use_tls = args.use_tls or false
+            local use_tls = args.use_tls == 'true'
+            local batch_size = tonumber(args.batch_size) or 1
+            if batch_size > 1 and delay_level then
+                ngx.say("delay_level not supported in batch")
+                return
+            end
 
             local total_success = 0
             local total_error = 0
@@ -52,9 +57,18 @@ __DATA__
                     local p = producer.new({ "127.0.0.1:9876"}, "produce_group")
                     p:setUseTLS(use_tls)
                     while running do
-                        local res, err = p:send(topic, message,"tag","key", {delayTimeLevel=delay_level})
+                        local res, err
+                        if batch_size == 1 then
+                            res, err = p:send(topic, message,"tag","key", {delayTimeLevel=delay_level})
+                        else
+                            local msgs = {}
+                            for i = 1, batch_size do
+                                table.insert(msgs, {topic=topic,body=message,tags="tag",keys="key"})
+                            end
+                            res, err = p:batchSend(msgs)
+                        end
                         if res then
-                            total_success = total_success + 1
+                            total_success = total_success + batch_size
                         else
                             total_error = total_error + 1
                         end
@@ -77,7 +91,7 @@ __DATA__
         }
     }
 --- request
-GET /send?thread_num=8
+GET /benchmark?thread_num=8
 --- response_body_like
 tps=.*,total_error=0
 tps=.*,total_error=0
