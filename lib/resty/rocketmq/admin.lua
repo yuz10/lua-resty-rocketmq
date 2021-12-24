@@ -5,6 +5,7 @@ local decoderFromTraceDataString = require("resty.rocketmq.trace").decoderFromTr
 local bit = require("bit")
 local cjson_safe = require("cjson.safe")
 local decode = require("resty.rocketmq.json").decode
+local split = require("resty.rocketmq.utils").split
 
 local bor = bit.bor
 local REQUEST_CODE = core.REQUEST_CODE
@@ -217,7 +218,28 @@ function _M.queryMessage(self, topic, key, maxNum, beginTime, endTime, isUniqKey
             ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', core.RESPONSE_CODE_NAME[res.code], ' remark:', core.remark)
         end
     end
-    return msgs
+    local msgs_filter = {}
+    for _, msg in ipairs(msgs) do
+        if msg.topic == topic then
+            if isUniqKey then
+                if msg.properties.UNIQ_KEY == key then
+                    table.insert(msgs_filter, msg)
+                end
+            else
+                local matched = false
+                for _, k in ipairs(split(msg.properties.KEYS, ' ')) do
+                    if k == key then
+                        matched = true
+                        break
+                    end
+                end
+                if matched then
+                    table.insert(msgs_filter, msg)
+                end
+            end
+        end
+    end
+    return msgs_filter
 end
 
 function _M.queryTraceByMsgId(self, traceTopic, msgId)
