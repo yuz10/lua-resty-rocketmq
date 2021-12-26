@@ -4,6 +4,8 @@ local utils = require("resty.rocketmq.utils")
 local trace = require("resty.rocketmq.trace")
 local RESPONSE_CODE = core.RESPONSE_CODE
 local cjson_safe = require("cjson.safe")
+local ngx = ngx
+local ngx_timer_at = ngx.timer.at
 
 ---@class producer
 local _M = {}
@@ -97,9 +99,9 @@ function _M:start()
         end
         self.client:updateAllTopicRouteInfoFromNameserver()
         sendHeartbeatToAllBroker(self)
-        ngx.timer.at(30, loop)
+        ngx_timer_at(30, loop)
     end
-    ngx.timer.at(30, loop)
+    ngx_timer_at(30, loop)
     if self.traceDispatcher then
         self.traceDispatcher:start()
     end

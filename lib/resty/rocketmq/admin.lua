@@ -10,6 +10,11 @@ local split = require("resty.rocketmq.utils").split
 local bor = bit.bor
 local REQUEST_CODE = core.REQUEST_CODE
 local RESPONSE_CODE = core.RESPONSE_CODE
+local ngx = ngx
+local log = ngx.log
+local WARN = ngx.WARN
+local ngx_thread_spawn = ngx.thread.spawn
+local ngx_thread_wait = ngx.thread.wait
 
 local _M = {}
 _M.__index = _M
@@ -46,7 +51,7 @@ function _M.createTopic(self, defaultTopic, newTopic, queueNum, topicSysFlag)
     if not h then
         return nil, err
     end
-    if h.code ~= core.RESPONSE_CODE.SUCCESS then
+    if h.code ~= RESPONSE_CODE.SUCCESS then
         return nil, ('getTopicRouteInfoFromNameserver return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
     end
     local topicRouteData, err = decode(b)
@@ -194,7 +199,7 @@ function _M.queryMessage(self, topic, key, maxNum, beginTime, endTime, isUniqKey
     end
     local threads = {}
     for i, brokerAddr in ipairs(allBrokerAddrs) do
-        threads[i] = ngx.thread.spawn(function()
+        threads[i] = ngx_thread_spawn(function()
             return self.client:request(REQUEST_CODE.QUERY_MESSAGE, brokerAddr, {
                 topic = topic,
                 key = key,
@@ -207,15 +212,15 @@ function _M.queryMessage(self, topic, key, maxNum, beginTime, endTime, isUniqKey
     end
     local msgs = {}
     for i, thread in ipairs(threads) do
-        local ok, res, body, err = ngx.thread.wait(thread)
+        local ok, res, body, err = ngx_thread_wait(thread)
         if not ok then
-            ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', res)
+            log(WARN, allBrokerAddrs[i], ' return ', res)
         elseif not res then
-            ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', err)
-        elseif res.code == core.RESPONSE_CODE.SUCCESS then
+            log(WARN, allBrokerAddrs[i], ' return ', err)
+        elseif res.code == RESPONSE_CODE.SUCCESS then
             core.decodeMsgs(msgs, body, true, true)
         else
-            ngx.log(ngx.WARN, allBrokerAddrs[i], ' return ', core.RESPONSE_CODE_NAME[res.code], ' remark:', core.remark)
+            log(WARN, allBrokerAddrs[i], ' return ', core.RESPONSE_CODE_NAME[res.code], ' remark:', core.remark)
         end
     end
     local msgs_filter = {}

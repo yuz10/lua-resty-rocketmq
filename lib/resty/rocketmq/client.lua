@@ -5,11 +5,12 @@ local split = require("resty.rocketmq.utils").split
 local decode = require("resty.rocketmq.json").decode
 
 local unpack = unpack
-local char = string.char
-local concat = table.concat
 local REQUEST_CODE = core.REQUEST_CODE
 local RESPONSE_CODE = core.RESPONSE_CODE
 local band = bit.band
+local ngx = ngx
+local log = ngx.log
+local WARN = ngx.WARN
 
 local _M = {}
 _M.__index = _M
@@ -196,7 +197,7 @@ local function updateAllTopicRouteInfoFromNameserver(self)
     for topic, _ in pairs(self.topicPublishInfoTable) do
         local _, err = updateTopicRouteInfoFromNameserver(self, topic)
         if err then
-            ngx.log(ngx.WARN, 'updateAllTopicRouteInfoFromNameserver fail, topic:', topic, 'err:', err)
+            log(WARN, 'updateAllTopicRouteInfoFromNameserver fail, topic:', topic, 'err:', err)
         end
     end
 end

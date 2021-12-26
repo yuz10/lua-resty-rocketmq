@@ -1,6 +1,8 @@
 local queue = require("resty.rocketmq.queue")
 local core = require("resty.rocketmq.core")
 local utils = require("resty.rocketmq.utils")
+local ngx = ngx
+local ngx_timer_at = ngx.timer.at
 
 local _M = {}
 _M.__index = _M
@@ -270,9 +272,9 @@ function _M.start(self)
             return
         end
         sendTrace(self)
-        ngx.timer.at(1, loop)
+        ngx_timer_at(1, loop)
     end
-    ngx.timer.at(1, loop)
+    ngx_timer_at(1, loop)
 end
 
 function _M.stop(self)

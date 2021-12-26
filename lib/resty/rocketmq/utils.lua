@@ -10,6 +10,7 @@ local find, sub, append = string.find, string.sub, table.insert
 local byte = string.byte
 local char = string.char
 local floor = math.floor
+local ngx = ngx
 
 local _M = {}
 math.randomseed(ngx.now())

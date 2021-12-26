@@ -11,6 +11,9 @@ local ngx_socket_tcp = ngx.socket.tcp
 local unpack = unpack
 local byte = string.byte
 local split = utils.split
+local ngx = ngx
+local log = ngx.log
+local DEBUG = ngx.DEBUG
 
 local _M = {}
 
@@ -347,7 +350,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
             hook:doBeforeRequest(addr, header, body)
         end
     end
-    ngx.log(ngx.DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
+    log(DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
     local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS, timeout)
@@ -355,7 +358,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
         return nil, nil, err
     end
     if not oneway then
-        ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(RESPONSE_CODE_NAME[respHeader.code] or respHeader.code, respHeader.remark or '', respBody))
+        log(DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(RESPONSE_CODE_NAME[respHeader.code] or respHeader.code, respHeader.remark or '', respBody))
     end
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
