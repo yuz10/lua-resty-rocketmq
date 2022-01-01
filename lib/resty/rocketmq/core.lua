@@ -335,6 +335,44 @@ local function getLong(buffer, offset)
     return lshift(res1, 32) + res2, offset
 end
 
+local function decodeHeader(recv)
+    local serializeType = byte(recv, 1)
+    local header_length = lshift(byte(recv, 2), 16) +
+            lshift(byte(recv, 3), 8) +
+            byte(recv, 4)
+    if serializeType == serializeTypeJson then
+        local header = string.sub(recv, 5, header_length + 4)
+        return cjson_safe.decode(header), header_length
+    else
+        local header = {
+            code = getShort(recv, 5),
+            version = getShort(recv, 8),
+            opaque = getInt(recv, 10),
+            flag = getInt(recv, 14),
+            extFields = {},
+        }
+        local remark_len = getInt(recv, 18)
+        if remark_len > 0 then
+            header.remark = string.sub(recv, 22, remark_len + 21)
+        end
+        local ext_fields_len, offset = getInt(recv, remark_len + 22)
+        local ext_fields_end = offset + ext_fields_len
+        while offset < ext_fields_end do
+            local len
+            len, offset = getShort(recv, offset)
+            local k = string.sub(recv, offset, offset + len - 1)
+            offset = offset + len
+
+            len, offset = getInt(recv, offset)
+            local v = string.sub(recv, offset, offset + len - 1)
+            offset = offset + len
+            header.extFields[k] = v
+        end
+        return header, header_length
+    end
+end
+_M.decodeHeader = decodeHeader
+
 local function doReqeust(ip, port, send, oneway, useTLS, timeout)
     local sock = ngx_socket_tcp()
     sock:settimeout(timeout)
@@ -365,12 +403,9 @@ local function doReqeust(ip, port, send, oneway, useTLS, timeout)
         return nil, nil, err
     end
     sock:setkeepalive(10000, 100)
-    local header_length = lshift(byte(recv, 2), 16) +
-            lshift(byte(recv, 3), 8) +
-            byte(recv, 4)
-    local header = string.sub(recv, 5, header_length + 4)
+    local header, header_length = decodeHeader(recv)
     local body = string.sub(recv, header_length + 5)
-    return cjson_safe.decode(header), body
+    return header, body
 end
 _M.doReqeust = doReqeust
 
