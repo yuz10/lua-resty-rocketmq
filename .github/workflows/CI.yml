@@ -11,9 +11,11 @@ on:
 
 jobs:
   test:
+    strategy:
+      matrix:
+        rocketmq_version: ['4.9.2', '4.9.0']
     runs-on: ubuntu-20.04
     env:
-      ROCEKTMQ_VER: 4.9.2
       OPENRESTY_VER: 1.19.9.1
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -28,16 +30,16 @@ jobs:
       - name: download rocketmq
         run: |
           cd ~
-          wget https://downloads.apache.org/rocketmq/${ROCEKTMQ_VER}/rocketmq-all-${ROCEKTMQ_VER}-bin-release.zip
-          unzip rocketmq-all-${ROCEKTMQ_VER}-bin-release.zip
+          wget https://archive.apache.org/dist/rocketmq/${{matrix.rocketmq_version}}/rocketmq-all-${{matrix.rocketmq_version}}-bin-release.zip
+          unzip rocketmq-all-${{matrix.rocketmq_version}}-bin-release.zip
 
       - name: run rocketmq
         run: |
-          cd ~/rocketmq-${ROCEKTMQ_VER}/
+          cd ~/rocketmq*/
           echo "traceTopicEnable=true" >> conf/dledger/broker-n0.conf
           echo "traceTopicEnable=true" >> conf/dledger/broker-n1.conf
           echo "traceTopicEnable=true" >> conf/dledger/broker-n2.conf
-          bin/dledger/fast-try.sh start
+          bash bin/dledger/fast-try.sh start
 
       - name: download openresty
         run: |

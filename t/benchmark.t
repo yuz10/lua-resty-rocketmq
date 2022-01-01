@@ -80,6 +80,7 @@ __DATA__
             local last_success = total_success
             for i = 1, 10 do
                 ngx.sleep(1)
+                ngx.update_time()
                 local time = ngx.now()
                 local success = total_success
                 ngx.say("tps=", (success - last_success) / (time - last_time),',total_error=', total_error)
