@@ -8,13 +8,11 @@ local lshift = bit.lshift
 local concat = table.concat
 local insert = table.insert
 local char = string.char
-local ngx_socket_tcp = ngx.socket.tcp
 local unpack = unpack
 local byte = string.byte
 local split = utils.split
 local ngx = ngx
-local log = ngx.log
-local DEBUG = ngx.DEBUG
+local ngx_socket_tcp = ngx.socket.tcp
 
 local _M = {}
 _M.serializeTypeCurrentRPC = "ROCKETMQ"  -- "JSON" or "ROCKETMQ"
@@ -224,10 +222,8 @@ _M.msgType = {
 
 _M.maxMessageSize = 1024 * 1024 * 4
 
-local VALID_PATTERN_STR = "^[%|a-zA-Z0-9_-]+$"
-
 function _M.checkTopic(t)
-    return ngx.re.match(t, VALID_PATTERN_STR, 'jo') and #t < 127
+    return #t < 127
 end
 
 function _M.isSystemTopic(t)
@@ -415,16 +411,16 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
             hook:doBeforeRequest(addr, header, body)
         end
     end
-    log(DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
+    --ngx.log(ngx.DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
     local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS, timeout)
     if err then
         return nil, nil, err
     end
-    if not oneway then
-        log(DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(RESPONSE_CODE_NAME[respHeader.code] or respHeader.code, respHeader.remark or '', respBody))
-    end
+    --if not oneway then
+    --    ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(RESPONSE_CODE_NAME[respHeader.code] or respHeader.code, respHeader.remark or '', respBody))
+    --end
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doAfterResponse(addr, header, body, respHeader, respBody)
