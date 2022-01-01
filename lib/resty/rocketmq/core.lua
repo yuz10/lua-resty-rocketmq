@@ -6,6 +6,7 @@ local band = bit.band
 local bor = bit.bor
 local lshift = bit.lshift
 local concat = table.concat
+local insert = table.insert
 local char = string.char
 local ngx_socket_tcp = ngx.socket.tcp
 local unpack = unpack
@@ -16,6 +17,9 @@ local log = ngx.log
 local DEBUG = ngx.DEBUG
 
 local _M = {}
+_M.serializeTypeCurrentRPC = "ROCKETMQ"  -- "JSON" or "ROCKETMQ"
+local serializeTypeJson = 0
+local serializeTypeRocketmq = 1
 
 _M.CID_RMQ_SYS_PREFIX = 'CID_RMQ_SYS_'
 _M.RETRY_GROUP_TOPIC_PREFIX = '%RETRY%'
@@ -234,37 +238,75 @@ function _M.checkMessage(m)
     return #m < 4194304
 end
 
+local function int2bin(n)
+    return char(band(rshift(n, 24), 0xff)) ..
+            char(band(rshift(n, 16), 0xff)) ..
+            char(band(rshift(n, 8), 0xff)) ..
+            char(band(n, 0xff))
+end
+
+local function short2bin(n)
+    return char(band(rshift(n, 8), 0xff)) ..
+            char(band(n, 0xff))
+end
+
 local requestId = 0
 local function encode(code, h, body, oneway)
-    requestId = requestId + 1
-    local header = {
-        code = code,
-        language = 'other',
-        flag = 0,
-        opaque = requestId,
-        serializeTypeCurrentRPC = 'JSON',
-        version = 373,
-        extFields = h,
-    }
-    if oneway then
-        header.flag = bor(header.flag, _M.RPC_ONEWAY)
-    end
-    header = cjson_safe.encode(header)
-    body = body or ''
-    local length = 4 + #header + #body
-    local header_length = #header
     local res = {
-        char(band(rshift(length, 24), 0xff)),
-        char(band(rshift(length, 16), 0xff)),
-        char(band(rshift(length, 8), 0xff)),
-        char(band(length, 0xff)),
-
-        char(0x00),
-        char(band(rshift(header_length, 16), 0xff)),
-        char(band(rshift(header_length, 8), 0xff)),
-        char(band(header_length, 0xff)),
+        "", -- length: fill later
+        char(_M.serializeTypeCurrentRPC == "JSON" and serializeTypeJson or serializeTypeRocketmq),
+        "", -- header_length: fill later
     }
-    return concat(res, '') .. header .. body
+
+    requestId = requestId + 1
+    local flag = 0
+    if oneway then
+        flag = bor(flag, _M.RPC_ONEWAY)
+    end
+    local header_length
+    if _M.serializeTypeCurrentRPC == "JSON" then
+        local header = {
+            code = code,
+            language = 'other',
+            flag = flag,
+            opaque = requestId,
+            serializeTypeCurrentRPC = _M.serializeTypeCurrentRPC,
+            version = 373, -- version:4.8.0
+            extFields = h,
+        }
+        header = cjson_safe.encode(header)
+        insert(res, header)
+        header_length = #header
+    else
+        insert(res, short2bin(code))
+        insert(res, char(0x07)) -- language: other
+        insert(res, short2bin(399)) -- version:4.9.3
+        insert(res, int2bin(requestId))
+        insert(res, int2bin(flag))
+        insert(res, int2bin(0)) -- remark len:0
+        insert(res, "") -- extFields len: fill later
+        local ext_fields_len_pos = #res
+        local ext_fields_len = 0
+        for k, v in pairs(h) do
+            insert(res, short2bin(#k))
+            insert(res, k)
+            local value = tostring(v)
+            insert(res, int2bin(#value))
+            insert(res, value)
+            ext_fields_len = ext_fields_len + 2 + 4 + #k + #value
+        end
+        res[ext_fields_len_pos] = int2bin(ext_fields_len)
+        header_length = 2 + 1 + 2 + 4 + 4 + 4 + 4 + ext_fields_len
+    end
+
+    body = body or ''
+    local length = 4 + header_length + #body
+    res[1] = int2bin(length)
+    res[3] = char(band(rshift(header_length, 16), 0xff))
+            .. char(band(rshift(header_length, 8), 0xff))
+            .. char(band(header_length, 0xff))
+    insert(res, body)
+    return concat(res)
 end
 _M.encode = encode
 
@@ -291,18 +333,6 @@ local function getLong(buffer, offset)
     res1, offset = getInt(buffer, offset)
     res2, offset = getInt(buffer, offset)
     return lshift(res1, 32) + res2, offset
-end
-
-local function intToBin(n)
-    return char(band(rshift(n, 24), 0xff)) ..
-            char(band(rshift(n, 16), 0xff)) ..
-            char(band(rshift(n, 8), 0xff)) ..
-            char(band(n, 0xff))
-end
-
-local function shortToBin(n)
-    return char(band(rshift(n, 8), 0xff)) ..
-            char(band(n, 0xff))
 end
 
 local function doReqeust(ip, port, send, oneway, useTLS, timeout)
@@ -429,14 +459,14 @@ _M.decodeMsgs = function(msgs, buffer, readBody, isClient)
     while offset < #buffer do
         local msg
         msg, offset = decodeMsg(buffer, offset, readBody, isClient)
-        table.insert(msgs, msg)
+        insert(msgs, msg)
     end
 end
 
 local function messageProperties2String(properties)
     local res = {}
     for k, v in pairs(properties) do
-        table.insert(res, k .. char(1) .. v .. char(2))
+        insert(res, k .. char(1) .. v .. char(2))
     end
     return concat(res, '')
 end
@@ -450,13 +480,13 @@ local function encodeMsg(msg)
             + 4 -- 4 FLAG
             + 4 + #msg.body -- 5 BODY
             + 2 + #properties;
-    return table.concat({
-        intToBin(storeSize), -- 1 TOTALSIZE
-        intToBin(0), -- 2 MAGICCOD
-        intToBin(0), -- 3 BODYCRC
-        intToBin(msg.flag), -- 4 FLAG
-        intToBin(#msg.body), msg.body, -- 5 BODY
-        shortToBin(#properties), properties, -- 6 properties
+    return concat({
+        int2bin(storeSize), -- 1 TOTALSIZE
+        int2bin(0), -- 2 MAGICCOD
+        int2bin(0), -- 3 BODYCRC
+        int2bin(msg.flag), -- 4 FLAG
+        int2bin(#msg.body), msg.body, -- 5 BODY
+        short2bin(#properties), properties, -- 6 properties
     })
 end
 _M.encodeMsg = encodeMsg
