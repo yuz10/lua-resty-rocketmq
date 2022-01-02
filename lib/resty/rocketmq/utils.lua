@@ -1,4 +1,5 @@
 local bit = require("bit")
+local to_hex = require("resty.string").to_hex
 local tohex = bit.tohex
 local band = bit.band
 local bor = bit.bor
@@ -10,6 +11,7 @@ local find, sub, append = string.find, string.sub, table.insert
 local byte = string.byte
 local char = string.char
 local floor = math.floor
+local upper = string.upper
 local ngx = ngx
 
 local _M = {}
@@ -102,15 +104,8 @@ local function string2bytes(s)
     return table.concat(res)
 end
 
-local b2h = '0123456789ABCDEF'
 local function bytes2string(s)
-    local res = {}
-    for i = 1, #s do
-        local b = byte(s, i)
-        table.insert(res, char(byte(b2h, rshift(b, 4) + 1)))
-        table.insert(res, char(byte(b2h, band(b, 0x0f) + 1)))
-    end
-    return table.concat(res)
+    return upper(to_hex(s))
 end
 
 local function toNumber(a)
@@ -226,7 +221,7 @@ do
     local pidBin = char(band(rshift(pid, 8), 0xff)) .. char(band(pid, 0xff))
     local clientIdHash = char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255)) .. char(random(0, 255))
     local counter = 0
-    local timeDiffEightHours =  8 * 60 * 60
+    local timeDiffEightHours = 8 * 60 * 60
     local thisMonth = 0
     local nextMonth = 0
 
