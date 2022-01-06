@@ -94,7 +94,6 @@ ok
             assert(msg.queueOffset - res.sendResult.queueOffset)
             assert(msg.offsetMsgId == res.sendResult.offsetMsgId)
             assert(msg.body == "halo world")
-            assert(msg.properties.CLUSTER == "RaftCluster")
             ngx.say("viewMessage: "..require("cjson").encode(msg))
         }
     }
@@ -102,7 +101,7 @@ ok
 GET /producer
 --- response_body_like
 send success
-broker name: \w+
+broker name: .+
 queue id: \d+
 queue offset: \d+
 offsetMsgId: \w+
@@ -124,7 +123,7 @@ viewMessage: .+
                 return
             end
             local maxOffset, err = adm:maxOffset({
-                brokerName = "RaftNode00",
+                brokerName = "broker-a",
                 topic = "TopicTest",
                 queueId = 0,
             })
@@ -136,7 +135,7 @@ viewMessage: .+
 
             -----------------minOffset
             local minOffset, err = adm:minOffset({
-                brokerName = "RaftNode00",
+                brokerName = "broker-a",
                 topic = "TopicTest",
                 queueId = 0,
             })
@@ -169,7 +168,7 @@ minOffset ok: 0
                 return
             end
             local timestamp, err = adm:earliestMsgStoreTime({
-                brokerName = "RaftNode00",
+                brokerName = "broker-a",
                 topic = "TopicTest",
                 queueId = 0,
             })

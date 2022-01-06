@@ -13,10 +13,10 @@ jobs:
   test:
     strategy:
       matrix:
-        rocketmq_version: ['4.9.2', '4.9.0']
+        rocketmq_version: 
+          - 4.4.0  # first version supporting msg trace
+          - 4.9.2
     runs-on: ubuntu-20.04
-    env:
-      OPENRESTY_VER: 1.19.9.1
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
@@ -35,11 +35,13 @@ jobs:
 
       - name: run rocketmq
         run: |
-          cd ~/rocketmq*/
-          echo "traceTopicEnable=true" >> conf/dledger/broker-n0.conf
-          echo "traceTopicEnable=true" >> conf/dledger/broker-n1.conf
-          echo "traceTopicEnable=true" >> conf/dledger/broker-n2.conf
-          bash bin/dledger/fast-try.sh start
+          cd ~
+          [ -d ~/rocketmq*/ ] && cd ~/rocketmq*/
+          echo "traceTopicEnable=true" >> conf/broker.conf
+          sed -i 's/sh ${ROCKETMQ_HOME}/bash ${ROCKETMQ_HOME}/' bin/mqnamesrv
+          sed -i 's/sh ${ROCKETMQ_HOME}/bash ${ROCKETMQ_HOME}/' bin/mqbroker
+          nohup bash bin/mqnamesrv &
+          nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 
       - name: download openresty
         run: |

@@ -108,7 +108,7 @@ ok
 GET /producer
 --- response_body_like
 send success
-broker name: \w+
+broker name: .+
 queue id: \d+
 queue offset: \d+
 offsetMsgId: \w+,\w+
