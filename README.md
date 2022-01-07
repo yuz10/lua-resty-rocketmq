@@ -45,7 +45,9 @@ Table of Contents
 Status
 ======
 
-This library is still under early development and is still experimental.
+Production ready.
+
+[![Test](https://github.com/yuz10/lua-resty-rocketmq/actions/workflows/CI.yml/badge.svg)](https://github.com/yuz10/lua-resty-rocketmq/actions)
 
 Description
 ===========

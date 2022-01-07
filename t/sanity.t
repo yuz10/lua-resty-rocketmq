@@ -12,6 +12,7 @@ our $HttpConfig = qq{
     lua_package_cpath "/usr/local/openresty/lualib/?.so;/usr/local/openresty/lualib/?.so;;";
 
     init_by_lua_block{
+        require 'resty.core'
         local producer = require "resty.rocketmq.producer"
         local admin = require "resty.rocketmq.admin"
     }

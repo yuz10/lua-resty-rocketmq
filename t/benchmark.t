@@ -10,6 +10,10 @@ my $pwd = cwd();
 our $HttpConfig = qq{
     lua_package_path "$pwd/lib/?.lua;;";
     lua_package_cpath "/usr/local/openresty/lualib/?.so;/usr/local/openresty/lualib/?.so;;";
+    
+    init_by_lua_block{
+        require 'resty.core'
+    }
 };
 
 no_long_string();
