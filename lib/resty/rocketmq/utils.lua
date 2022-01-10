@@ -17,31 +17,6 @@ local ngx = ngx
 local _M = {}
 math.randomseed(ngx.now())
 
--- https://github.com/thibaultcha/lua-resty-jit-uuid/blob/master/lib/resty/jit-uuid.lua
-function _M.uuid()
-    return (fmt('%s%s%s%s-%s%s-%s%s-%s%s-%s%s%s%s%s%s',
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-
-            tohex(bor(band(random(0, 255), 0x0F), 0x40), 2),
-            tohex(random(0, 255), 2),
-
-            tohex(bor(band(random(0, 255), 0x3F), 0x80), 2),
-            tohex(random(0, 255), 2),
-
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2),
-            tohex(random(0, 255), 2)))
-end
-
 -- https://github.com/lunarmodules/Penlight/blob/master/lua/pl/utils.lua
 local function split(s, sep, n)
     local i1, ls = 1, {}
