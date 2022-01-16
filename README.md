@@ -118,7 +118,7 @@ To load this module, just do this
 
 #### new
 
-`syntax: p = producer.new(nameservers, produce_group, enableMsgTrace)`
+`syntax: p = producer.new(nameservers, produce_group, enableMsgTrace, customizedTraceTopic)`
 
 `nameservers` is list of nameserver addresses
 

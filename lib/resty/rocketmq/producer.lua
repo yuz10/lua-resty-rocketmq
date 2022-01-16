@@ -11,7 +11,7 @@ local ngx_timer_at = ngx.timer.at
 local _M = {}
 _M.__index = _M
 
-function _M.new(nameservers, groupName, enableMsgTrace)
+function _M.new(nameservers, groupName, enableMsgTrace, customizedTraceTopic)
     local cli, err = client.new(nameservers)
     if not cli then
         return nil, err
@@ -24,7 +24,7 @@ function _M.new(nameservers, groupName, enableMsgTrace)
         endTransactionHookList = {},
     }, _M)
     if enableMsgTrace then
-        producer.traceDispatcher = trace.new(nameservers, trace.PRODUCE)
+        producer.traceDispatcher = trace.new(nameservers, trace.PRODUCE, customizedTraceTopic)
         producer:registerSendMessageHook(producer.traceDispatcher.hook)
         producer:registerEndTransactionHook(producer.traceDispatcher.hook)
     end

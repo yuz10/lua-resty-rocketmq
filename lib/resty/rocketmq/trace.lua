@@ -19,13 +19,14 @@ _M.EndTransaction = "EndTransaction"
 local CONTENT_SPLITOR = string.char(1)
 local FIELD_SPLITOR = string.char(2)
 
-function _M.new(nameservers, type)
+function _M.new(nameservers, type, customizedTraceTopic)
     local producer = require("resty.rocketmq.producer")
     local p = producer.new(nameservers, "_INNER_TRACE_PRODUCER-" .. type)
     local q = queue.new()
     return setmetatable({
         producer = p,
         queue = q,
+        trace_topic = customizedTraceTopic or core.RMQ_SYS_TRACE_TOPIC,
         hook = setmetatable({ queue = q },
                 type == _M.PRODUCE and produceMt or consumeMt)
     }, _M)
@@ -219,7 +220,7 @@ local function sendTraceDataByMQ(self, keySet, data, topic)
     for k in pairs(keySet) do
         table.insert(keys, k)
     end
-    local res, err = self.producer:send(core.RMQ_SYS_TRACE_TOPIC, data, "", table.concat(keys, ' '))
+    local res, err = self.producer:send(self.trace_topic, data, "", table.concat(keys, ' '))
     if err then
         ngx.log(ngx.WARN, 'send msg trace fail, ', err)
     end

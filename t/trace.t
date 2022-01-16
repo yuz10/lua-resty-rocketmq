@@ -38,8 +38,9 @@ __DATA__
                 return
             end
             adm:createTopic("TBW102", "TopicTest", 1)
+            adm:createTopic("TBW102", "Trace", 1)
 
-            local p, err = producer.new(nameservers, "produce_group", true)
+            local p, err = producer.new(nameservers, "produce_group", true, "Trace")
             if not p then
                 ngx.say("create producer err:", err)
                 return
@@ -55,7 +56,7 @@ __DATA__
             ngx.log(ngx.WARN, require("cjson").encode(res.sendResult))
 
             -----------------viewMessage
-            local trace, err = adm:queryTraceByMsgId(null, res.sendResult.msgId)
+            local trace, err = adm:queryTraceByMsgId("Trace", res.sendResult.msgId)
             if not trace then
                 ngx.say("query trace err:", err)
                 return
