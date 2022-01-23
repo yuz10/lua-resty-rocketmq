@@ -39,6 +39,7 @@ __DATA__
             end
             adm:createTopic("TBW102", "TopicTest", 1)
             adm:createTopic("TBW102", "Trace", 1)
+            ngx.sleep(1)
 
             local p, err = producer.new(nameservers, "produce_group", true, "Trace")
             if not p then
