@@ -411,7 +411,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
             hook:doBeforeRequest(addr, header, body)
         end
     end
-    --ngx.log(ngx.DEBUG, ('\27[33msend: %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
+    --ngx.log(ngx.DEBUG, ('\27[33msend %s: %s %s\27[0m %s %s'):format(oneway and 'oneway' or '', addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local send = encode(code, header, body, oneway)
     local ip, port = unpack(split(addr, ':'))
     local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS, timeout)

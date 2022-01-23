@@ -101,7 +101,7 @@ function _M:start()
         sendHeartbeatToAllBroker(self)
         ngx_timer_at(30, loop)
     end
-    ngx_timer_at(30, loop)
+    ngx_timer_at(10, loop)
     if self.traceDispatcher then
         self.traceDispatcher:start()
     end
@@ -230,7 +230,7 @@ function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties
         return nil, "TransactionListener is null"
     end
     local msg = genMsg(self.groupName, topic, message, tags, keys, properties)
-    msg.properties.TRANS_MSG = 'true'
+    msg.properties.TRAN_MSG = 'true'
     msg.properties.PGROUP = self.groupName
 
     local h, err = produce(self, msg)
