@@ -1,9 +1,10 @@
-#!/usr/local/openresty/bin/resty
+#!/usr/local/openresty/bin/resty -c1000
 
 package.path = ';../lib/?.lua;' .. package.path
 
 local admin = require "resty.rocketmq.admin"
 local producer = require "resty.rocketmq.producer"
+local core = require "resty.rocketmq.core"
 
 local adm, err = admin.new({ "127.0.0.1:9876" })
 adm:createTopic("TBW102", "TopicTest", 8)
@@ -15,9 +16,15 @@ local trace_enable = false
 local delay_level = nil
 local use_tls = false
 local batch_size = 1
+local transaction = false
+local ak = nil
+local sk = nil
 
-if batch_size > 1 and delay_level then
-    ngx.say("delay_level not supported in batch")
+local function is(x)
+    return x and 1 or 0
+end
+if is(batch_size > 1) + is(delay_level) + is(transaction) > 1 then
+    ngx.say("only one of delay, transaction and batch is supported")
     return
 end
 
@@ -32,10 +39,22 @@ for i = 1, thread_num do
         end
         local message = table.concat(message_buffer)
         local p = producer.new({ "127.0.0.1:9876" }, "produce_group", trace_enable)
+        p:setTransactionListener({
+            executeLocalTransaction = function(self, msg, arg)
+                return core.TRANSACTION_COMMIT_TYPE
+            end
+        })
         p:setUseTLS(use_tls)
+        if ak and sk then
+            local aclHook = require("resty.rocketmq.acl_rpchook").new(ak, sk)
+            p:addRPCHook(aclHook)
+        end
+        p:start()
         while running do
             local res, err
-            if batch_size == 1 then
+            if transaction then
+                res, err = p:sendMessageInTransaction(topic, message, "tag", "key")
+            elseif batch_size == 1 then
                 res, err = p:send(topic, message, "tag", "key", { delayTimeLevel = delay_level })
             else
                 local msgs = {}
