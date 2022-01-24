@@ -95,7 +95,6 @@ local function toLong(a)
     local res = 0ULL
     for i = 1, #a do
         res = lshift(res, 8) + byte(a, i)
-            print(i, ' ', byte(a,i),' ',res)
     end
     local s = tostring(res)
     return string.sub(s, 1, #s-3)
