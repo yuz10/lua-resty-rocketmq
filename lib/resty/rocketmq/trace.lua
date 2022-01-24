@@ -252,7 +252,7 @@ local function sendTrace(self)
                 end
                 table.insert(buffer, trans.data)
                 len = len + #trans.data
-                if len >= core.maxMessageSize then
+                if len >= 11800 then
                     sendTraceDataByMQ(self, keySet, table.concat(buffer), topic)
                     keySet = {}
                     buffer = {}
