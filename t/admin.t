@@ -46,8 +46,15 @@ __DATA__
                 return
             end
             local res, err = p:send("AaTopic", "halo world", "tags", "Aa")
+            if not res then
+                ngx.say("send err:", err)
+                return
+            end
             local res, err = p:send("BBTopic", "halo world", "tags", "BB")
-            ngx.log(ngx.WARN, require("cjson").encode(res.sendResult))
+            if not res then
+                ngx.say("send err:", err)
+                return
+            end
 
             -----------------queryMessage
             local time = ngx.now() * 1000
