@@ -91,6 +91,16 @@ local function toNumber(a)
     return res
 end
 
+local function toLong(a)
+    local res = 0ULL
+    for i = 1, #a do
+        res = lshift(res, 8) + byte(a, i)
+            print(i, ' ', byte(a,i),' ',res)
+    end
+    local s = tostring(res)
+    return string.sub(s, 1, #s-3)
+end
+
 local function toIp(a)
     if #a == 4 then
         --ipv4
@@ -131,7 +141,7 @@ function _M.decodeMessageId(msgId)
     local ip = string2bytes(msgId:sub(1, ipLength))
     local port = string2bytes(msgId:sub(ipLength + 1, ipLength + 8))
     local offset = string2bytes(msgId:sub(ipLength + 8 + 1, ipLength + 8 + 16))
-    return toIp(ip) .. ':' .. toNumber(port), toNumber(offset)
+    return toIp(ip) .. ':' .. toNumber(port), toLong(offset)
 end
 
 function _M.string2messageProperties(str)
