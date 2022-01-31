@@ -7,6 +7,9 @@ local admin = require "resty.rocketmq.admin"
 
 local nameservers = { "127.0.0.1:9876" }
 
+local adm, err = admin.new({ "127.0.0.1:9876" })
+adm:createTopic("TBW102", "TopicTest", 8)
+
 local message = "halo world"
 local p, err = producer.new(nameservers)
 if not p then

@@ -328,7 +328,8 @@ local function getLong(buffer, offset)
     local res1, res2
     res1, offset = getInt(buffer, offset)
     res2, offset = getInt(buffer, offset)
-    return lshift(res1, 32) + res2, offset
+    local long = lshift(0ULL + res1, 32) + res2
+    return tostring(long):sub(0, -4), offset
 end
 
 local function decodeHeader(recv)
