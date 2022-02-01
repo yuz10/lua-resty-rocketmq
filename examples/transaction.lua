@@ -2,15 +2,15 @@
 
 package.path = ';../lib/?.lua;' .. package.path
 
+local cjson = require("cjson")
 local producer = require "resty.rocketmq.producer"
 local core = require "resty.rocketmq.core"
 
 local nameservers = { "127.0.0.1:9876" }
 
-local message = "halo world"
 local p, err = producer.new(nameservers)
 if not p then
-    ngx.say("create producer err:", err)
+    print("create producer err:", err)
     return
 end
 p:start()
@@ -22,11 +22,11 @@ p:setTransactionListener({
 })
 
 while true do
-    local res, err = p:sendMessageInTransaction("TopicTest", nil, message)
+    local res, err = p:sendMessageInTransaction("TopicTest", nil, "halo world")
     if not res then
-        ngx.say("send err:", err)
+        print("send err:", err)
     else
-        ngx.say("send success: " .. require("cjson").encode(res.sendResult))
+        print("send success: " .. cjson.encode(res.sendResult))
     end
 
     ngx.sleep(1)

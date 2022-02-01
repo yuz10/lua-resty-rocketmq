@@ -3,6 +3,8 @@ Name
 
 lua-resty-rocketmq - Lua rocketmq client driver for the ngx_lua based on the cosocket API
 
+[![Test](https://github.com/yuz10/lua-resty-rocketmq/actions/workflows/CI.yml/badge.svg)](https://github.com/yuz10/lua-resty-rocketmq/actions)
+
 Table of Contents
 =================
 
@@ -46,8 +48,6 @@ Status
 ======
 
 Production ready.
-
-[![Test](https://github.com/yuz10/lua-resty-rocketmq/actions/workflows/CI.yml/badge.svg)](https://github.com/yuz10/lua-resty-rocketmq/actions)
 
 Description
 ===========
@@ -375,6 +375,7 @@ See Also
 ========
 * ngx_lua module: https://github.com/openresty/lua-nginx-module
 * apache rocketmq: https://github.com/apache/rocketmq
-* [lua-resty-kafka](https://github.com/doujiang24/lua-resty-kafka) library
+* lua-resty-kafka: https://github.com/doujiang24/lua-resty-kafka
+* luatz: https://github.com/daurnimator/luatz
 
 [Back to TOC](#table-of-contents)

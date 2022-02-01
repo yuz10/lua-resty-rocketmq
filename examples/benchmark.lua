@@ -24,7 +24,7 @@ local function is(x)
     return x and 1 or 0
 end
 if is(batch_size > 1) + is(delay_level) + is(transaction) > 1 then
-    ngx.say("only one of delay, transaction and batch is supported")
+    print("only one of delay, transaction and batch is supported")
     return
 end
 
@@ -79,8 +79,7 @@ for i = 1, 10 do
     ngx.update_time()
     local time = ngx.now()
     local success = total_success
-    ngx.say("tps=", (success - last_success) / (time - last_time), ',total_error=', total_error)
-    ngx.flush()
+    print("tps=", (success - last_success) / (time - last_time), ',total_error=', total_error)
     last_time = time
     last_success = success
 end
