@@ -38,6 +38,7 @@ function _M.new(nameservers)
         timeout = 3000,
 
         topicPublishInfoTable = {},
+        topicSubscribeInfoTable = {},
         brokerAddrTable = {},
     }, _M)
 end
@@ -76,7 +77,6 @@ function _M:getTopicRouteInfoFromNameserver(topic)
     local addr = nameserver.ip .. ':' .. nameserver.port
     return self:request(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, addr, { topic = topic }, nil, false)
 end
-
 
 function _M:sendMessage(brokerAddr, msg)
     return self:request(REQUEST_CODE.SEND_MESSAGE_V2, brokerAddr, {
@@ -153,6 +153,23 @@ local function topicRouteData2TopicPublishInfo(topic, route)
     return info
 end
 
+local function topicRouteData2TopicSubscribeInfo(topic, route)
+    local mqList = {}
+    local qds = route.queueDatas
+    for _, qd in ipairs(qds) do
+        if band(qd.perm, core.PERM_READ) == core.PERM_READ then
+            for i = 0, qd.readQueueNums - 1 do
+                table.insert(mqList, {
+                    topic = topic,
+                    brokerName = qd.brokerName,
+                    queueId = i,
+                })
+            end
+        end
+    end
+    return mqList;
+end
+
 local function updateTopicRouteInfoFromNameserver(self, topic)
     local h, b, err = self:getTopicRouteInfoFromNameserver(topic)
     if err then
@@ -167,6 +184,10 @@ local function updateTopicRouteInfoFromNameserver(self, topic)
     end
     local publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData)
     self.topicPublishInfoTable[topic] = publishInfo
+
+    local subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData)
+    self.topicSubscribeInfoTable[topic] = subscribeInfo
+
     for _, bd in ipairs(topicRouteData.brokerDatas) do
         self.brokerAddrTable[bd.brokerName] = bd.brokerAddrs
     end
