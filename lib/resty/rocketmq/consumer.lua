@@ -7,7 +7,10 @@ local RESPONSE_CODE = core.RESPONSE_CODE
 local cjson_safe = require("cjson.safe")
 local ngx = ngx
 local ngx_timer_at = ngx.timer.at
+local split = utils.split
+
 local log = ngx.log
+local WARN = ngx.WARN
 local ERR = ngx.ERR
 
 ---@class consumer
@@ -37,11 +40,13 @@ function _M.new(nameservers, consumerGroup, rpcHook)
         consumerGroup = consumerGroup,
         rpcHook = rpcHook,
         client = cli,
+        clientID = '127.0.0.1@' .. ngx.worker.pid() .. '#' .. (ngx.now() * 1000),
         consumeMessageHookList = {},
     }, _M)
     for k, default in pairs(defaults) do
         consumer[k] = default
     end
+    consumer.rebalancer = rebalancer.new(consumer)
     return consumer
 end
 
@@ -60,24 +65,74 @@ function _M.registerConsumeMessageHook(self, hook)
     end
 end
 
-local function selectOneMessageQueue(topicPublishInfo)
-    local index = topicPublishInfo.sendWhichQueue
-    topicPublishInfo.sendWhichQueue = index + 1
-    local pos = math.abs(index) % #topicPublishInfo.messageQueueList
-    return topicPublishInfo.messageQueueList[pos + 1]
-end
-
 local function sendHeartbeatToAllBroker(self)
+    local subscriptionDataSet = {}
+    for _, v in pairs(self.rebalancer.subscriptionInner) do
+        table.insert(subscriptionDataSet, v)
+    end
     local heartbeatData = {
-        clientID = '' .. ngx.worker.pid(),
-        producerDataSet = { { groupName = self.groupName } },
-        consumerDataSet = setmetatable({}, cjson_safe.empty_array_mt)
+        clientID = '' .. self.clientID,
+        producerDataSet = setmetatable({}, cjson_safe.empty_array_mt),
+        consumerDataSet = {
+            {
+                groupName = self.consumerGroup,
+                consumeType = "CONSUME_ACTIVELY",
+                messageModel = self.messageModel,
+                consumeFromWhere = "CONSUME_FROM_LAST_OFFSET",
+                subscriptionDataSet = subscriptionDataSet,
+                unitMode = false,
+            }
+        }
     }
+    print('sendHeartbeatToAllBroker', cjson_safe.encode(heartbeatData))
     for brokerName, brokers in pairs(self.client.brokerAddrTable) do
         local addr = brokers[0]
+        print('sendHeartbeatToAllBroker1', addr)
         if addr then
             local h, b, err = self.client:sendHeartbeat(addr, heartbeatData)
+            if err then
+                log(WARN, 'fail to send heartbeat:', err)
+            elseif h.code ~= RESPONSE_CODE.SUCCESS then
+                log(WARN, 'fail to send heartbeat, code:', core.RESPONSE_CODE_NAME[h.code] or h.code, ',remark:', h.remark)
+            end
         end
+    end
+end
+
+local function buildSubscriptionData(topic, subExpression)
+    if subExpression == nil or subExpression == '' then
+        subExpression = '*'
+    end
+    local subscriptionData = {
+        topic = topic,
+        subString = subExpression,
+        tagsSet = setmetatable({}, cjson_safe.empty_array_mt),
+        codeSet = setmetatable({}, cjson_safe.empty_array_mt),
+    }
+    for _, tag in ipairs(split(subExpression, '||')) do
+        if #tag > 0 then
+            table.insert(subscriptionData.tagsSet, tag)
+            table.insert(subscriptionData.codeSet, 0)
+        end
+    end
+    return subscriptionData
+end
+
+local function updateTopicSubscribeInfoWhenSubscriptionChanged(self)
+    for topic, _ in pairs(self.rebalancer.subscriptionInner) do
+        local res, err = self.client:updateTopicRouteInfoFromNameserver(topic)
+        if err then
+            log(WARN, 'fail to updateTopicRouteInfoFromNameserver:', err)
+        end
+    end
+end
+
+function _M:subscribe(topic, subExpression)
+    local subscriptionData = buildSubscriptionData(topic, subExpression)
+    self.rebalancer.subscriptionInner[topic] = subscriptionData
+    if self.running then
+        sendHeartbeatToAllBroker(self)
+        updateTopicSubscribeInfoWhenSubscriptionChanged(self)
     end
 end
 
@@ -96,17 +151,19 @@ local function setTraceDispatcher(self)
 end
 
 local function initRebalanceImpl(self)
-    self.rebalanceImpl = rebalancer.new()
+    self.rebalancer:start()
 end
 
 function _M:start()
     local self = self
+    self.running = true
     setTraceDispatcher(self)
-    sendHeartbeatToAllBroker(self)
     initRebalanceImpl(self)
+    updateTopicSubscribeInfoWhenSubscriptionChanged(self)
+    sendHeartbeatToAllBroker(self)
     local loop
     loop = function()
-        if self.exit then
+        if not self.running then
             return
         end
         self.client:updateAllTopicRouteInfoFromNameserver()
@@ -120,218 +177,22 @@ function _M:start()
 end
 
 function _M:stop()
-    self.exit = true
+    self.running = false
     if self.traceDispatcher then
         self.traceDispatcher:stop()
     end
 end
 
-local function getSendResult(h, msg, mqSelected, err)
-    if not h then
-        return nil, err
-    end
-    if h.code ~= core.RESPONSE_CODE.SUCCESS then
-        return nil, h.remark
-    end
-    return {
-        messageQueue = {
-            topic = msg.topic,
-            brokerName = mqSelected.brokerName,
-            queueId = tonumber(mqSelected.queueId),
-        },
-        offsetMsgId = h.extFields.msgId,
-        msgId = msg.properties.UNIQ_KEY,
-        queueOffset = tonumber(h.extFields.queueOffset),
-    }
+function _M:removeUnnecessaryMessageQueue(mq, pq)
+    log(WARN, 'removeUnnecessaryMessageQueue')
 end
 
-local function produce(self, msg)
-    if not core.checkTopic(msg.topic) or not core.checkMessage(msg.body) then
-        return nil, 'invalid topic or message'
-    end
-    local topicPublishInfo, err = self.client:tryToFindTopicPublishInfo(msg.topic)
-    if not topicPublishInfo then
-        return nil, err
-    end
-    local mqSelected = selectOneMessageQueue(topicPublishInfo)
-    local brokerAddr = self.client:findBrokerAddressInPublish(mqSelected.brokerName, msg.topic)
-    msg.queueId = mqSelected.queueId
-
-    local context
-    if #self.consumeMessageHookList > 0 then
-        context = {
-            producer = self,
-            producerGroup = self.groupName,
-            communicationMode = "SYNC",
-            bornHost = "127.0.0.1",
-            brokerAddr = brokerAddr,
-            message = msg,
-            mq = mqSelected,
-            msgType = core.Normal_Msg,
-        }
-        if msg.properties.TRAN_MSG == 'true' then
-            context.msgType = core.Trans_Msg_Half
-        elseif msg.properties.DELAY then
-            context.msgType = core.Delay_Msg
-        end
-        for _, hook in ipairs(self.consumeMessageHookList) do
-            hook:sendMessageBefore(context)
-        end
-    end
-
-    local h, _, err = self.client:sendMessage(brokerAddr, msg)
-    local sendResult, err = getSendResult(h, msg, mqSelected, err)
-    if #self.consumeMessageHookList > 0 then
-        if sendResult then
-            context.sendResult = sendResult
-        else
-            context.exception = err
-        end
-        for _, hook in ipairs(self.consumeMessageHookList) do
-            hook:sendMessageAfter(context)
-        end
-    end
-
-    if not sendResult then
-        return nil, err
-    end
-    h.sendResult = sendResult
-    return h
+function _M:removeDirtyOffset(mq)
+    log(WARN, 'removeDirtyOffset')
 end
 
-local function genMsg(groupName, topic, message, tags, keys, properties)
-    properties = properties or {}
-    return {
-        producerGroup = groupName,
-        topic = topic,
-        defaultTopic = "TBW102",
-        defaultTopicQueueNums = 4,
-        sysFlag = 0,
-        bornTimeStamp = ngx.now() * 1000,
-        flag = 0,
-        properties = {
-            UNIQ_KEY = utils.genUniqId(),
-            KEYS = keys,
-            TAGS = tags,
-            WAIT = properties.waitStoreMsgOk or 'true',
-            DELAY = properties.delayTimeLevel,
-        },
-        reconsumeTimes = 0,
-        unitMode = false,
-        maxReconsumeTimes = 0,
-        batch = false,
-        body = message,
-    }
-end
-
-function _M:send(topic, message, tags, keys, properties)
-    return produce(self, genMsg(self.groupName, topic, message, tags, keys, properties))
-end
-
-function _M:setTransactionListener(transactionListener)
-    if type(transactionListener.executeLocalTransaction) ~= 'function' then
-        return nil, 'invalid callback'
-    end
-    self.transactionListener = transactionListener
-end
-
-
--- todo add check callback
-function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties)
-    if not self.transactionListener then
-        return nil, "TransactionListener is null"
-    end
-    local msg = genMsg(self.groupName, topic, message, tags, keys, properties)
-    msg.properties.TRAN_MSG = 'true'
-    msg.properties.PGROUP = self.groupName
-
-    local h, err = produce(self, msg)
-    if not h then
-        return nil, err
-    end
-    local localTransactionState = core.TRANSACTION_NOT_TYPE
-    if h.code == RESPONSE_CODE.SUCCESS then
-        msg.properties.__transationId__ = h.transationId
-        msg.transationId = msg.properties.UNIQ_KEY
-        localTransactionState = self.transactionListener:executeLocalTransaction(msg, arg)
-    else
-        localTransactionState = core.TRANSACTION_ROLLBACK_TYPE
-    end
-    local _, commitLogOffset = utils.decodeMessageId(h.extFields.offsetMsgId or h.extFields.msgId)
-    local brokerAddr = self.client:findBrokerAddressInPublish(h.sendResult.messageQueue.brokerName, topic)
-
-    if #self.endTransactionHookList > 0 then
-        local context = {
-            producerGroup = self.groupName,
-            brokerAddr = brokerAddr,
-            message = msg,
-            msgId = msg.properties.UNIQ_KEY,
-            transactionId = msg.properties.UNIQ_KEY,
-            transactionState = core.TRANSACTION_TYPE_MAP[localTransactionState],
-            fromTransactionCheck = false,
-        }
-        for _, hook in ipairs(self.endTransactionHookList) do
-            hook:endTransaction(context)
-        end
-    end
-
-    self.client:endTransactionOneway(brokerAddr, {
-        producerGroup = self.groupName,
-        transationId = h.transationId,
-        commitLogOffset = commitLogOffset,
-        commitOrRollback = localTransactionState,
-        tranStateTableOffset = h.extFields.queueOffset,
-        msgId = h.extFields.msgId,
-    })
-    return h
-end
-
-function _M:batchSend(msgs)
-    local first
-    local batch_body = {}
-    for _, m in ipairs(msgs) do
-        if not core.checkTopic(m.topic) or not core.checkMessage(m.body) then
-            return nil, 'invalid topic or message'
-        end
-
-        local msg = genMsg(self.groupName, m.topic, m.body, m.tags, m.keys, m.properties)
-        if msg.properties.DELAY then
-            return nil, 'TimeDelayLevel is not supported for batching'
-        end
-
-        if not first then
-            first = msg
-            if msg.topic:find(core.RETRY_GROUP_TOPIC_PREFIX, nil, true) == 1 then
-                return nil, 'Retry Group is not supported for batching'
-            end
-        else
-            if msg.topic ~= first.topic then
-                return nil, 'The topic of the messages in one batch should be the same'
-            end
-            if msg.properties.WAIT ~= first.properties.WAIT then
-                return nil, 'The waitStoreMsgOK of the messages in one batch should the same'
-            end
-        end
-        table.insert(batch_body, core.encodeMsg(msg))
-    end
-    return produce(self, {
-        producerGroup = self.groupName,
-        topic = first.topic,
-        defaultTopic = "TBW102",
-        defaultTopicQueueNums = 4,
-        sysFlag = 0,
-        bornTimeStamp = ngx.now() * 1000,
-        flag = 0,
-        properties = {
-            UNIQ_KEY = utils.genUniqId(),
-            WAIT = first.waitStoreMsgOk,
-        },
-        reconsumeTimes = 0,
-        unitMode = false,
-        maxReconsumeTimes = 0,
-        batch = true,
-        body = table.concat(batch_body),
-    })
+function _M:messageQueueChanged(topic, mqList, allocateResult)
+    log(WARN, 'messageQueueChanged')
 end
 
 _M.AllocateMessageQueueAveragely = function(consumerGroup, currentCID, mqAll, cidAll)

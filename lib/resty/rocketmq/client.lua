@@ -11,6 +11,7 @@ local band = bit.band
 local ngx = ngx
 local log = ngx.log
 local WARN = ngx.WARN
+local random = math.random
 
 local _M = {}
 _M.__index = _M
@@ -39,6 +40,7 @@ function _M.new(nameservers)
 
         topicPublishInfoTable = {},
         topicSubscribeInfoTable = {},
+        topicRouteTable = {},
         brokerAddrTable = {},
     }, _M)
 end
@@ -188,11 +190,14 @@ local function updateTopicRouteInfoFromNameserver(self, topic)
     local subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData)
     self.topicSubscribeInfoTable[topic] = subscribeInfo
 
+    self.topicRouteTable[topic] = topicRouteData
+
     for _, bd in ipairs(topicRouteData.brokerDatas) do
         self.brokerAddrTable[bd.brokerName] = bd.brokerAddrs
     end
     return publishInfo
 end
+_M.updateTopicRouteInfoFromNameserver = updateTopicRouteInfoFromNameserver
 
 local function tryToFindTopicPublishInfo(self, topic)
     local info = self.topicPublishInfoTable[topic]
@@ -223,5 +228,48 @@ local function updateAllTopicRouteInfoFromNameserver(self)
     end
 end
 _M.updateAllTopicRouteInfoFromNameserver = updateAllTopicRouteInfoFromNameserver
+
+function _M:findBrokerAddrByTopic(topic)
+    local topicRouteData = self.topicRouteTable[topic]
+    if topicRouteData == nil then
+        return nil
+    end
+    local brokers = topicRouteData.brokerDatas
+    if brokers == nil or #brokers == 0 then
+        return nil
+    end
+    local bd = brokers[random(#brokers)]
+    local addr = bd.brokerAddrs[0]
+    if not addr then
+        local _
+        _, addr = next(bd.brokerAddrs)
+    end
+    return addr
+end
+
+function _M:findConsumerIdList(topic, consumerGroup)
+    local brokerAddr = self:findBrokerAddrByTopic(topic)
+    if brokerAddr == nil then
+        updateTopicRouteInfoFromNameserver(self, topic)
+        brokerAddr = self:findBrokerAddrByTopic(topic)
+    end
+    if brokerAddr == nil then
+        return nil
+    end
+    local h, b, err = self:request(REQUEST_CODE.GET_CONSUMER_LIST_BY_GROUP, brokerAddr, {
+        consumerGroup = consumerGroup
+    })
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('findConsumerIdList return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    local body, err = cjson_safe.decode(b)
+    if not body then
+        return nil, err
+    end
+    return body.consumerIdList
+end
 
 return _M
