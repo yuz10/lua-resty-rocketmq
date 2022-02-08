@@ -16,6 +16,7 @@ local _M = {}
 _M.__index = _M
 
 function _M.new(consumer)
+    ---@type rebalancer
     local rebalancer = setmetatable({
         consumer = consumer,
         client = consumer.client,
@@ -27,23 +28,10 @@ function _M.new(consumer)
     return rebalancer
 end
 
-local function buildMqKey(mq)
-    return mq.topic .. '##' .. mq.brokerName .. '##' .. mq.queueId
-end
-
-local function buildMq(mqKey)
-    local spl = split(mqKey, '##')
-    return {
-        topic = spl[1],
-        brokerName = spl[2],
-        queueId = tonumber(spl[3]),
-    }
-end
-
 local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet)
     local changed = false
     for mqKey, pq in pairs(self.processQueueTable) do
-        local mq = buildMq(mqKey)
+        local mq = utils.buildMq(mqKey)
         if mq.topic == topic then
             if not allocateResultSet[mqKey] then
                 self.consumer:removeUnnecessaryMessageQueue(mq, pq)
@@ -51,15 +39,31 @@ local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet
             end
         end
     end
-
+    local pullRequestList = {}
     for mqKey, _ in pairs(allocateResultSet) do
         if not self.processQueueTable[mqKey] then
-            local mq = buildMq(mqKey)
+            local mq = utils.buildMq(mqKey)
             self.consumer:removeDirtyOffset(mq)
-            self.processQueueTable[mqKey] = {}
+            local now = ngx.now()
+            local pq = {
+                lastPullTimestamp = now,
+                lastConsumeTimestamp = now,
+            }
+            self.processQueueTable[mqKey] = pq
+            local nextOffset, err = self.consumer:computePullFromWhere(mq)
+            if not nextOffset then
+                log(INFO, "doRebalance, ", self.consumerGroup, ", compute offset failed, ", err)
+            end
+            table.insert(pullRequestList, {
+                consumerGroup = self.consumerGroup,
+                nextOffset = nextOffset,
+                mq = mq,
+                pq = pq,
+            })
             changed = true
         end
     end
+    self.consumer:dispatchPullRequest(pullRequestList)
     return changed
 end
 
@@ -81,15 +85,14 @@ local function rebalanceByTopic(self, topic)
         return a.queueId < b.queueId
     end)
     table.sort(cidAll)
-    print(cjson_safe.encode(self))
-    local allocateResult, err = self.consumer.allocateMessageQueueStrategy(self.consumer.consumerGroup, self.clientId, mqList, cidAll)
+    local allocateResult, err = self.consumer.allocateMessageQueueStrategy(self.consumer.consumerGroup, self.clientID, mqList, cidAll)
     if not allocateResult then
         log(ERR, "allocateMessageQueueStrategy failed,", err)
         return
     end
     local allocateResultSet = {}
     for _, mq in ipairs(allocateResult) do
-        allocateResultSet[buildMqKey(mq)] = true
+        allocateResultSet[utils.buildMqKey(mq)] = true
     end
     local changed = updateProcessQueueTableInRebalance(self, topic, allocateResultSet)
     if changed then

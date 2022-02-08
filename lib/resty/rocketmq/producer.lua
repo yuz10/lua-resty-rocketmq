@@ -75,33 +75,25 @@ local function selectOneMessageQueue(topicPublishInfo)
     return topicPublishInfo.messageQueueList[pos + 1]
 end
 
-local function sendHeartbeatToAllBroker(self)
+local function sendHeartbeatToAllBroker(self, sock_map)
     local heartbeatData = {
         clientID = '' .. ngx.worker.pid(),
         producerDataSet = { { groupName = self.groupName } },
         consumerDataSet = setmetatable({}, cjson_safe.empty_array_mt)
     }
-    for brokerName, brokers in pairs(self.client.brokerAddrTable) do
-        local addr = brokers[0]
-        if addr then
-            local h, b, err = self.client:sendHeartbeat(addr, heartbeatData)
-        end
-    end
+    self.client:sendHeartbeatToAllBroker(sock_map, heartbeatData)
 end
 
 function _M:start()
     local self = self
-    sendHeartbeatToAllBroker(self)
-    local loop
-    loop = function()
-        if self.exit then
-            return
+    ngx_timer_at(10, function()
+        local sock_map = {}
+        while not self.exit do
+            self.client:updateAllTopicRouteInfoFromNameserver()
+            sendHeartbeatToAllBroker(self, sock_map)
+            ngx.sleep(30)
         end
-        self.client:updateAllTopicRouteInfoFromNameserver()
-        sendHeartbeatToAllBroker(self)
-        ngx_timer_at(30, loop)
-    end
-    ngx_timer_at(10, loop)
+    end)
     if self.traceDispatcher then
         self.traceDispatcher:start()
     end

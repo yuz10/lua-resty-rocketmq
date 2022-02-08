@@ -13,26 +13,16 @@ local log = ngx.log
 local WARN = ngx.WARN
 local random = math.random
 
+---@class client
 local _M = {}
 _M.__index = _M
 function _M.new(nameservers)
     if #nameservers == 0 then
         return nil, 'no nameserver'
     end
-    local nameservers_parsed = {}
-    for _, v in ipairs(nameservers) do
-
-        local ip, port = unpack(split(v, ':'))
-        if not port then
-            return nil, 'nameserver no port:' .. v
-        end
-        table.insert(nameservers_parsed, {
-            ip = ip,
-            port = port
-        })
-    end
-    return setmetatable({
-        nameservers = nameservers_parsed,
+    ---@type client
+    local client = setmetatable({
+        nameservers = nameservers,
         current_nameserver = 1,
         RPCHook = {},
         useTLS = false,
@@ -43,6 +33,7 @@ function _M.new(nameservers)
         topicRouteTable = {},
         brokerAddrTable = {},
     }, _M)
+    return client
 end
 
 function _M.addRPCHook(self, hook)
@@ -65,6 +56,10 @@ function _M:request(code, addr, header, body, oneway)
     return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS, self.timeout)
 end
 
+function _M:request1(code, sock, header, body, oneway)
+    return core.request1(code, sock, header, body, oneway, self.RPCHook)
+end
+
 function _M:chooseNameserver()
     local nameserver = self.nameservers[self.current_nameserver]
     self.current_nameserver = self.current_nameserver + 1
@@ -75,8 +70,7 @@ function _M:chooseNameserver()
 end
 
 function _M:getTopicRouteInfoFromNameserver(topic)
-    local nameserver = self:chooseNameserver()
-    local addr = nameserver.ip .. ':' .. nameserver.port
+    local addr = self:chooseNameserver()
     return self:request(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, addr, { topic = topic }, nil, false)
 end
 
@@ -102,8 +96,8 @@ function _M:endTransactionOneway(brokerAddr, msg)
     return self:request(REQUEST_CODE.END_TRANSACTION, brokerAddr, msg, nil, true)
 end
 
-function _M:sendHeartbeat(brokerAddr, heartbeatData)
-    return self:request(REQUEST_CODE.HEART_BEAT, brokerAddr, {}, cjson_safe.encode(heartbeatData), false)
+function _M:sendHeartbeat(sock, heartbeatData)
+    return self:request1(REQUEST_CODE.HEART_BEAT, sock, {}, cjson_safe.encode(heartbeatData), false)
 end
 
 local function topicRouteData2TopicPublishInfo(topic, route)
@@ -219,6 +213,13 @@ local function findBrokerAddressInPublish(self, brokerName, topic)
 end
 _M.findBrokerAddressInPublish = findBrokerAddressInPublish
 
+local function findBrokerAddressInSubscribe(self, brokerName)
+    local map = self.brokerAddrTable[brokerName]
+    if map then
+        return map[0]
+    end
+end
+
 local function updateAllTopicRouteInfoFromNameserver(self)
     for topic, _ in pairs(self.topicPublishInfoTable) do
         local _, err = updateTopicRouteInfoFromNameserver(self, topic)
@@ -270,6 +271,53 @@ function _M:findConsumerIdList(topic, consumerGroup)
         return nil, err
     end
     return body.consumerIdList
+end
+
+function _M:updateConsumeOffsetToBroker(mq, offset)
+    local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
+
+    return self:request(REQUEST_CODE.UPDATE_CONSUMER_OFFSET, brokerAddr, {
+        topic = mq.offset,
+        consumerGroup = mq.consumerGroup,
+        queueId = mq.queueId,
+        commitOffset = offset,
+    }, nil, true)
+end
+
+function _M:fetchConsumeOffsetFromBroker(mq)
+    local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
+
+    local h, b, err =  self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
+        topic = mq.offset,
+        consumerGroup = mq.consumerGroup,
+        queueId = mq.queueId,
+    })
+    if not h then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('fetchConsumeOffsetFromBroker return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    return h.extFields.offset
+end
+
+function _M:sendHeartbeatToAllBroker(sock_map, heartbeatData)
+    for brokerName, brokers in pairs(self.brokerAddrTable) do
+        local addr = brokers[0]
+        if addr then
+            local sock = sock_map[addr]
+            if not sock then
+                sock = core.newSocket(addr, self.useTLS, self.timeout, { pool_size = 1, backlog = 10, pool = 'heart' .. addr })
+                sock_map[addr] = sock
+            end
+            local h, b, err = self:sendHeartbeat(sock, heartbeatData)
+            if err then
+                log(WARN, 'fail to send heartbeat:', err)
+            elseif h.code ~= RESPONSE_CODE.SUCCESS then
+                log(WARN, 'fail to send heartbeat, code:', core.RESPONSE_CODE_NAME[h.code] or h.code, ',remark:', h.remark)
+            end
+        end
+    end
 end
 
 return _M

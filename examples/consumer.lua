@@ -1,4 +1,4 @@
-#!/usr/local/openresty/bin/resty
+#!/usr/local/openresty/bin/resty -c1000
 
 package.path = ';../lib/?.lua;' .. package.path
 
