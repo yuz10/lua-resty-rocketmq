@@ -374,7 +374,6 @@ local function newSocket(addr, useTLS, timeout, opt)
     local ip, port = unpack(split(addr, ':'))
     local sock = ngx_socket_tcp()
     sock:settimeout(timeout)
-    sock:setkeepalive(10000, 100)
 
     local res, err = sock:connect(ip, port, opt)
     if not res then
@@ -408,6 +407,9 @@ local function doReqeust(addr, sock, send, requestId, oneway, processor)
         local recv, err = sock:receive(length)
         if not recv then
             return nil, nil, err
+        end
+        if not processor then
+            sock:setkeepalive(10000, 100)
         end
         header, header_length = decodeHeader(recv)
         body = string.sub(recv, header_length + 5)
