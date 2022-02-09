@@ -288,7 +288,7 @@ end
 function _M:fetchConsumeOffsetFromBroker(consumerGroup, mq)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
 
-    local h, b, err =  self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
+    local h, b, err = self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = consumerGroup,
         queueId = mq.queueId,
@@ -308,7 +308,12 @@ function _M:sendHeartbeatToAllBroker(sock_map, heartbeatData)
         if addr then
             local sock = sock_map[addr]
             if not sock then
-                sock = core.newSocket(addr, self.useTLS, self.timeout, { pool_size = 1, backlog = 10, pool = 'heart' .. addr })
+                local err
+                sock, err = core.newSocket(addr, self.useTLS, self.timeout, { pool_size = 1, backlog = 10, pool = 'heart' .. addr })
+                if not sock then
+                    log(WARN, 'fail to new socket when send heartbeat:', err)
+                    return
+                end
                 sock_map[addr] = sock
             end
             local h, b, err = self:sendHeartbeat(addr, sock, heartbeatData, self.processor)

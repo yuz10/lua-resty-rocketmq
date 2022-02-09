@@ -31,25 +31,28 @@ end
 local total_success = 0
 local total_error = 0
 local running = true
+
+local message_buffer = {}
+for i = 1, msg_size / 10 do
+    table.insert(message_buffer, '0123456789')
+end
+local message = table.concat(message_buffer)
+
+local p = producer.new({ "127.0.0.1:9876" }, "produce_group", trace_enable)
+p:start()
+p:setTransactionListener({
+    executeLocalTransaction = function(self, msg, arg)
+        return core.TRANSACTION_COMMIT_TYPE
+    end
+})
+p:setUseTLS(use_tls)
+if ak and sk then
+    local aclHook = require("resty.rocketmq.acl_rpchook").new(ak, sk)
+    p:addRPCHook(aclHook)
+end
+
 for i = 1, thread_num do
     ngx.thread.spawn(function()
-        local message_buffer = {}
-        for i = 1, msg_size / 10 do
-            table.insert(message_buffer, '0123456789')
-        end
-        local message = table.concat(message_buffer)
-        local p = producer.new({ "127.0.0.1:9876" }, "produce_group", trace_enable)
-        p:setTransactionListener({
-            executeLocalTransaction = function(self, msg, arg)
-                return core.TRANSACTION_COMMIT_TYPE
-            end
-        })
-        p:setUseTLS(use_tls)
-        if ak and sk then
-            local aclHook = require("resty.rocketmq.acl_rpchook").new(ak, sk)
-            p:addRPCHook(aclHook)
-        end
-        p:start()
         while running do
             local res, err
             if transaction then
@@ -84,3 +87,4 @@ for i = 1, 10 do
     last_success = success
 end
 running = false
+p:stop()

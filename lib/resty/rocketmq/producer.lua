@@ -89,10 +89,15 @@ function _M:start()
     local self = self
     ngx_timer_at(10, function()
         local sock_map = {}
+        local time = ngx.now()
         while not self.exit do
-            self.client:updateAllTopicRouteInfoFromNameserver()
-            sendHeartbeatToAllBroker(self, sock_map)
-            ngx.sleep(30)
+            local now = ngx.now()
+            if now - time > 30 then
+                self.client:updateAllTopicRouteInfoFromNameserver()
+                sendHeartbeatToAllBroker(self, sock_map)
+                time = now
+            end
+            ngx.sleep(1)
         end
     end)
     if self.traceDispatcher then
