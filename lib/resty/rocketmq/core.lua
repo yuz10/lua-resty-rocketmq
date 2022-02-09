@@ -302,7 +302,7 @@ local function encode(code, h, body, oneway)
             .. char(band(rshift(header_length, 8), 0xff))
             .. char(band(header_length, 0xff))
     insert(res, body)
-    return concat(res)
+    return concat(res), requestId
 end
 _M.encode = encode
 
@@ -370,19 +370,27 @@ local function decodeHeader(recv)
 end
 _M.decodeHeader = decodeHeader
 
-local function doReqeust(ip, port, send, oneway, useTLS, timeout)
+local function newSocket(addr, useTLS, timeout, opt)
+    local ip, port = unpack(split(addr, ':'))
     local sock = ngx_socket_tcp()
     sock:settimeout(timeout)
-    local res, err = sock:connect(ip, port)
+    sock:setkeepalive(10000, 100)
+
+    local res, err = sock:connect(ip, port, opt)
     if not res then
-        return nil, nil, ('connect %s:%s fail:%s'):format(ip, port, err)
+        return nil, ('connect %s:%s fail:%s'):format(ip, port, err)
     end
     if useTLS then
         local ok, err = sock:sslhandshake(nil, nil, false)
         if not ok then
-            return ok, nil, "failed to do ssl handshake: " .. err
+            return nil, "failed to do ssl handshake: " .. err
         end
     end
+    return sock
+end
+_M.newSocket = newSocket
+
+local function doReqeust(addr, sock, send, requestId, oneway, processor)
     local ok, err = sock:send(send)
     if not ok then
         return nil, nil, err
@@ -390,18 +398,27 @@ local function doReqeust(ip, port, send, oneway, useTLS, timeout)
     if oneway then
         return true
     end
-    local recv, err = sock:receive(4)
-    if not recv then
-        return nil, nil, err
+    local header, header_length, body
+    while true do
+        local recv, err = sock:receive(4)
+        if not recv then
+            return nil, nil, err
+        end
+        local length = getInt(recv, 1)
+        local recv, err = sock:receive(length)
+        if not recv then
+            return nil, nil, err
+        end
+        header, header_length = decodeHeader(recv)
+        body = string.sub(recv, header_length + 5)
+        --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, header.remark or '', body))
+        if processor and band(header.flag, _M.RPC_TYPE) == 0 then
+            processor:processRequest(addr, header, body)
+        end
+        if header.opaque == requestId and band(header.flag, _M.RPC_TYPE) > 0 then
+            break
+        end
     end
-    local length = getInt(recv, 1)
-    local recv, err = sock:receive(length)
-    if not recv then
-        return nil, nil, err
-    end
-    sock:setkeepalive(10000, 100)
-    local header, header_length = decodeHeader(recv)
-    local body = string.sub(recv, header_length + 5)
     return header, body
 end
 _M.doReqeust = doReqeust
@@ -412,16 +429,16 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
             hook:doBeforeRequest(addr, header, body)
         end
     end
-    --ngx.log(ngx.DEBUG, ('\27[33msend %s: %s %s\27[0m %s %s'):format(oneway and 'oneway' or '', addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
-    local send = encode(code, header, body, oneway)
-    local ip, port = unpack(split(addr, ':'))
-    local respHeader, respBody, err = doReqeust(ip, port, send, oneway, useTLS, timeout)
+    --print(('\27[33msend %s: %s %s\27[0m %s %s'):format(oneway and 'oneway' or '', addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
+    local send, requestId = encode(code, header, body, oneway)
+    local sock, err = newSocket(addr, useTLS, timeout)
     if err then
         return nil, nil, err
     end
-    --if not oneway then
-    --    ngx.log(ngx.DEBUG, ('\27[34mrecv:%s\27[0m %s %s'):format(RESPONSE_CODE_NAME[respHeader.code] or respHeader.code, respHeader.remark or '', respBody))
-    --end
+    local respHeader, respBody, err = doReqeust(addr, sock, send, requestId, oneway)
+    if err then
+        return nil, nil, err
+    end
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doAfterResponse(addr, header, body, respHeader, respBody)
@@ -430,6 +447,26 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
     return respHeader, respBody, err
 end
 _M.request = request
+
+_M.request1 = function(code, addr, sock, header, body, RPCHook, processor)
+    if RPCHook then
+        for _, hook in ipairs(RPCHook) do
+            hook:doBeforeRequest(addr, header, body)
+        end
+    end
+    --print(('\27[33msend : %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
+    local send, requestId = encode(code, header, body, false)
+    local respHeader, respBody, err = doReqeust(addr, sock, send, requestId, false, processor)
+    if err then
+        return nil, nil, err
+    end
+    if RPCHook then
+        for _, hook in ipairs(RPCHook) do
+            hook:doAfterResponse(addr, header, body, respHeader, respBody)
+        end
+    end
+    return respHeader, respBody, err
+end
 
 local function decodeMsg(buffer, offset, readBody, isClient)
     local msgExt = {}

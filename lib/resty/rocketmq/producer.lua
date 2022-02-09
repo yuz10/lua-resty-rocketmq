@@ -2,6 +2,7 @@ local core = require("resty.rocketmq.core")
 local client = require("resty.rocketmq.client")
 local utils = require("resty.rocketmq.utils")
 local trace = require("resty.rocketmq.trace")
+local REQUEST_CODE = core.REQUEST_CODE
 local RESPONSE_CODE = core.RESPONSE_CODE
 local cjson_safe = require("cjson.safe")
 local ngx = ngx
@@ -12,17 +13,17 @@ local _M = {}
 _M.__index = _M
 
 function _M.new(nameservers, groupName, enableMsgTrace, customizedTraceTopic)
-    local cli, err = client.new(nameservers)
-    if not cli then
-        return nil, err
-    end
     ---@type producer
     local producer = setmetatable({
-        client = cli,
         groupName = groupName or "DEFAULT_PRODUCER",
         sendMessageHookList = {},
         endTransactionHookList = {},
     }, _M)
+    local cli, err = client.new(nameservers, producer)
+    if not cli then
+        return nil, err
+    end
+    producer.client = cli
     if enableMsgTrace then
         producer.traceDispatcher = trace.new(nameservers, trace.PRODUCE, customizedTraceTopic)
         producer:registerSendMessageHook(producer.traceDispatcher.hook)
@@ -75,33 +76,25 @@ local function selectOneMessageQueue(topicPublishInfo)
     return topicPublishInfo.messageQueueList[pos + 1]
 end
 
-local function sendHeartbeatToAllBroker(self)
+local function sendHeartbeatToAllBroker(self, sock_map)
     local heartbeatData = {
         clientID = '' .. ngx.worker.pid(),
         producerDataSet = { { groupName = self.groupName } },
         consumerDataSet = setmetatable({}, cjson_safe.empty_array_mt)
     }
-    for brokerName, brokers in pairs(self.client.brokerAddrTable) do
-        local addr = brokers[0]
-        if addr then
-            local h, b, err = self.client:sendHeartbeat(addr, heartbeatData)
-        end
-    end
+    self.client:sendHeartbeatToAllBroker(sock_map, heartbeatData)
 end
 
 function _M:start()
     local self = self
-    sendHeartbeatToAllBroker(self)
-    local loop
-    loop = function()
-        if self.exit then
-            return
+    ngx_timer_at(10, function()
+        local sock_map = {}
+        while not self.exit do
+            self.client:updateAllTopicRouteInfoFromNameserver()
+            sendHeartbeatToAllBroker(self, sock_map)
+            ngx.sleep(30)
         end
-        self.client:updateAllTopicRouteInfoFromNameserver()
-        sendHeartbeatToAllBroker(self)
-        ngx_timer_at(30, loop)
-    end
-    ngx_timer_at(10, loop)
+    end)
     if self.traceDispatcher then
         self.traceDispatcher:start()
     end
@@ -217,12 +210,30 @@ function _M:send(topic, message, tags, keys, properties)
 end
 
 function _M:setTransactionListener(transactionListener)
-    if type(transactionListener.executeLocalTransaction) ~= 'function' then
+    if type(transactionListener.executeLocalTransaction) ~= 'function' or type(transactionListener.checkLocalTransaction) ~= 'function' then
         return nil, 'invalid callback'
     end
     self.transactionListener = transactionListener
 end
 
+local function endTransaction(self, brokerAddr, msg, h)
+    if #self.endTransactionHookList > 0 then
+        local context = {
+            producerGroup = self.groupName,
+            brokerAddr = brokerAddr,
+            message = msg,
+            msgId = msg.properties.UNIQ_KEY,
+            transactionId = msg.properties.UNIQ_KEY,
+            transactionState = core.TRANSACTION_TYPE_MAP[h.localTransactionState],
+            fromTransactionCheck = h.fromTransactionCheck,
+        }
+        for _, hook in ipairs(self.endTransactionHookList) do
+            hook:endTransaction(context)
+        end
+    end
+
+    self.client:endTransactionOneway(brokerAddr, h)
+end
 
 -- todo add check callback
 function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties)
@@ -247,30 +258,16 @@ function _M:sendMessageInTransaction(topic, arg, message, tags, keys, properties
     end
     local _, commitLogOffset = utils.decodeMessageId(h.extFields.offsetMsgId or h.extFields.msgId)
     local brokerAddr = self.client:findBrokerAddressInPublish(h.sendResult.messageQueue.brokerName, topic)
-
-    if #self.endTransactionHookList > 0 then
-        local context = {
-            producerGroup = self.groupName,
-            brokerAddr = brokerAddr,
-            message = msg,
-            msgId = msg.properties.UNIQ_KEY,
-            transactionId = msg.properties.UNIQ_KEY,
-            transactionState = core.TRANSACTION_TYPE_MAP[localTransactionState],
-            fromTransactionCheck = false,
-        }
-        for _, hook in ipairs(self.endTransactionHookList) do
-            hook:endTransaction(context)
-        end
-    end
-
-    self.client:endTransactionOneway(brokerAddr, {
+    endTransaction(self, brokerAddr, msg, {
         producerGroup = self.groupName,
         transationId = h.transationId,
         commitLogOffset = commitLogOffset,
         commitOrRollback = localTransactionState,
         tranStateTableOffset = h.extFields.queueOffset,
         msgId = h.extFields.msgId,
+        fromTransactionCheck = false,
     })
+
     return h
 end
 
@@ -321,4 +318,21 @@ function _M:batchSend(msgs)
         body = table.concat(batch_body),
     })
 end
+
+function _M:processRequest(addr, header, body)
+    if header.code == REQUEST_CODE.CHECK_TRANSACTION_STATE then
+        local msg = core.decodeMsg(body, true, true)
+        local localTransactionState = self.transactionListener:checkLocalTransaction(msg)
+        endTransaction(self, addr, msg, {
+            producerGroup = self.groupName,
+            transationId = header.extFields.transationId,
+            commitLogOffset = header.extFields.commitLogOffset,
+            commitOrRollback = localTransactionState,
+            tranStateTableOffset = header.extFields.tranStateTableOffset,
+            msgId = msg.properties.UNIQ_KEY,
+            fromTransactionCheck = true,
+        })
+    end
+end
+
 return _M

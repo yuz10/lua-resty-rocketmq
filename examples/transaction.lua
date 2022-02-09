@@ -1,4 +1,4 @@
-#!/usr/local/openresty/bin/resty
+#!/usr/local/openresty/bin/resty -c1000
 
 package.path = ';../lib/?.lua;' .. package.path
 
@@ -17,6 +17,10 @@ p:start()
 
 p:setTransactionListener({
     executeLocalTransaction = function(self, msg, arg)
+        return core.TRANSACTION_NOT_TYPE
+    end,
+    checkLocalTransaction = function(self, msg)
+        print('check:', cjson.encode(msg))
         return core.TRANSACTION_COMMIT_TYPE
     end
 })
@@ -29,7 +33,7 @@ while true do
         print("send success: " .. cjson.encode(res.sendResult))
     end
 
-    ngx.sleep(1)
+    ngx.sleep(10)
 end
 
 

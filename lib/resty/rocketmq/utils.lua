@@ -97,7 +97,7 @@ local function toLong(a)
         res = lshift(res, 8) + byte(a, i)
     end
     local s = tostring(res)
-    return string.sub(s, 1, #s-3)
+    return string.sub(s, 1, #s - 3)
 end
 
 local function toIp(a)
@@ -231,6 +231,23 @@ do
         local counterBin = char(band(rshift(counter, 8), 0xff)) .. char(band(counter, 0xff))
         return bytes2string(ip .. pidBin .. clientIdHash .. timeBin .. counterBin)
     end
+end
+
+function _M.buildMqKey(mq)
+    return mq.topic .. '##' .. mq.brokerName .. '##' .. mq.queueId
+end
+
+function _M.buildMq(mqKey)
+    local spl = split(mqKey, '##')
+    return {
+        topic = spl[1],
+        brokerName = spl[2],
+        queueId = tonumber(spl[3]),
+    }
+end
+
+function _M.startsWith(s, prefix)
+    return s:sub(1, #prefix) == prefix
 end
 
 return _M
