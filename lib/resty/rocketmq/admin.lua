@@ -248,7 +248,7 @@ function _M.queryMessage(self, topic, key, maxNum, beginTime, endTime, isUniqKey
 end
 
 function _M.queryTraceByMsgId(self, traceTopic, msgId)
-    local msgs, err = self:queryMessage(traceTopic or core.RMQ_SYS_TRACE_TOPIC, msgId, 64, 0, ngx.now() * 1000)
+    local msgs, err = self:queryMessage(traceTopic or core.RMQ_SYS_TRACE_TOPIC, msgId, 64, 0, (ngx.now() + 1) * 1000)
     if not msgs then
         return nil, err
     end
