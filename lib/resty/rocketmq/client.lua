@@ -16,7 +16,7 @@ local random = math.random
 ---@class client
 local _M = {}
 _M.__index = _M
-function _M.new(nameservers)
+function _M.new(nameservers, processor)
     if #nameservers == 0 then
         return nil, 'no nameserver'
     end
@@ -32,6 +32,7 @@ function _M.new(nameservers)
         topicSubscribeInfoTable = {},
         topicRouteTable = {},
         brokerAddrTable = {},
+        processor = processor,
     }, _M)
     return client
 end
@@ -56,8 +57,8 @@ function _M:request(code, addr, header, body, oneway)
     return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS, self.timeout)
 end
 
-function _M:request1(code, sock, header, body, oneway)
-    return core.request1(code, sock, header, body, oneway, self.RPCHook)
+function _M:request1(code, addr, sock, header, body, processor)
+    return core.request1(code, addr, sock, header, body, self.RPCHook, processor)
 end
 
 function _M:chooseNameserver()
@@ -96,8 +97,8 @@ function _M:endTransactionOneway(brokerAddr, msg)
     return self:request(REQUEST_CODE.END_TRANSACTION, brokerAddr, msg, nil, true)
 end
 
-function _M:sendHeartbeat(sock, heartbeatData)
-    return self:request1(REQUEST_CODE.HEART_BEAT, sock, {}, cjson_safe.encode(heartbeatData), false)
+function _M:sendHeartbeat(addr, sock, heartbeatData, processor)
+    return self:request1(REQUEST_CODE.HEART_BEAT, addr, sock, {}, cjson_safe.encode(heartbeatData), processor)
 end
 
 local function topicRouteData2TopicPublishInfo(topic, route)
@@ -284,12 +285,12 @@ function _M:updateConsumeOffsetToBroker(mq, offset)
     }, nil, true)
 end
 
-function _M:fetchConsumeOffsetFromBroker(mq)
+function _M:fetchConsumeOffsetFromBroker(consumerGroup, mq)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
 
     local h, b, err =  self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
-        topic = mq.offset,
-        consumerGroup = mq.consumerGroup,
+        topic = mq.topic,
+        consumerGroup = consumerGroup,
         queueId = mq.queueId,
     })
     if not h then
@@ -298,7 +299,7 @@ function _M:fetchConsumeOffsetFromBroker(mq)
     if h.code ~= RESPONSE_CODE.SUCCESS then
         return nil, ('fetchConsumeOffsetFromBroker return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
     end
-    return h.extFields.offset
+    return tonumber(h.extFields.offset)
 end
 
 function _M:sendHeartbeatToAllBroker(sock_map, heartbeatData)
@@ -310,7 +311,7 @@ function _M:sendHeartbeatToAllBroker(sock_map, heartbeatData)
                 sock = core.newSocket(addr, self.useTLS, self.timeout, { pool_size = 1, backlog = 10, pool = 'heart' .. addr })
                 sock_map[addr] = sock
             end
-            local h, b, err = self:sendHeartbeat(sock, heartbeatData)
+            local h, b, err = self:sendHeartbeat(addr, sock, heartbeatData, self.processor)
             if err then
                 log(WARN, 'fail to send heartbeat:', err)
             elseif h.code ~= RESPONSE_CODE.SUCCESS then

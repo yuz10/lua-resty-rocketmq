@@ -390,7 +390,7 @@ local function newSocket(addr, useTLS, timeout, opt)
 end
 _M.newSocket = newSocket
 
-local function doReqeust(sock, send, requestId, oneway)
+local function doReqeust(addr, sock, send, requestId, oneway, processor)
     local ok, err = sock:send(send)
     if not ok then
         return nil, nil, err
@@ -411,7 +411,10 @@ local function doReqeust(sock, send, requestId, oneway)
         end
         header, header_length = decodeHeader(recv)
         body = string.sub(recv, header_length + 5)
-        print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, header.remark or '', body))
+        --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, header.remark or '', body))
+        if processor and band(header.flag, _M.RPC_TYPE) == 0 then
+            processor:processRequest(addr, header, body)
+        end
         if header.opaque == requestId and band(header.flag, _M.RPC_TYPE) > 0 then
             break
         end
@@ -432,7 +435,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
     if err then
         return nil, nil, err
     end
-    local respHeader, respBody, err = doReqeust(sock, send, requestId, oneway)
+    local respHeader, respBody, err = doReqeust(addr, sock, send, requestId, oneway)
     if err then
         return nil, nil, err
     end
@@ -445,20 +448,19 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
 end
 _M.request = request
 
-_M.request1 = function(code, sock, header, body, oneway, RPCHook)
-    local addr = sock[3]
+_M.request1 = function(code, addr, sock, header, body, RPCHook, processor)
     if RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doBeforeRequest(addr, header, body)
         end
     end
-    --print(('\27[33msend %s: %s %s\27[0m %s %s'):format(oneway and 'oneway' or '', addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
-    local send, requestId = encode(code, header, body, oneway)
-    local respHeader, respBody, err = doReqeust(sock, send, requestId, oneway)
+    --print(('\27[33msend : %s %s\27[0m %s %s'):format(addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
+    local send, requestId = encode(code, header, body, false)
+    local respHeader, respBody, err = doReqeust(addr, sock, send, requestId, false, processor)
     if err then
         return nil, nil, err
     end
-    if not oneway and RPCHook then
+    if RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doAfterResponse(addr, header, body, respHeader, respBody)
         end

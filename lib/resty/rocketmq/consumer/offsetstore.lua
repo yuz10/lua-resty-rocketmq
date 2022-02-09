@@ -29,7 +29,7 @@ function _M:updateOffset(mq, offset, increaseOnly)
 end
 
 local function readOffsetFromBroker(self, mq)
-    local brokerOffset = self.client:fetchConsumeOffsetFromBroker(mq);
+    local brokerOffset = self.client:fetchConsumeOffsetFromBroker(self.consumer.consumerGroup, mq);
     self:updateOffset(mq, brokerOffset, false)
     return brokerOffset
 end
