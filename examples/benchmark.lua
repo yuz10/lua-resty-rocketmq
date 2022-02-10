@@ -6,9 +6,6 @@ local admin = require "resty.rocketmq.admin"
 local producer = require "resty.rocketmq.producer"
 local core = require "resty.rocketmq.core"
 
-local adm, err = admin.new({ "127.0.0.1:9876" })
-adm:createTopic("TBW102", "TopicTest", 8)
-
 local thread_num = 10
 local msg_size = 120
 local topic = "TopicTest"
@@ -27,6 +24,9 @@ if is(batch_size > 1) + is(delay_level) + is(transaction) > 1 then
     print("only one of delay, transaction and batch is supported")
     return
 end
+
+local adm, err = admin.new({ "127.0.0.1:9876" })
+adm:createTopic("TBW102", topic, 8)
 
 local total_success = 0
 local total_error = 0
