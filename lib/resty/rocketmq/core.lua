@@ -408,9 +408,7 @@ local function doReqeust(addr, sock, send, requestId, oneway, processor)
         if not recv then
             return nil, nil, err
         end
-        if not processor then
-            sock:setkeepalive(10000, 100)
-        end
+
         header, header_length = decodeHeader(recv)
         body = string.sub(recv, header_length + 5)
         --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, header.remark or '', body))
@@ -441,6 +439,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
     if err then
         return nil, nil, err
     end
+    sock:setkeepalive(10000, 100)
     if not oneway and RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doAfterResponse(addr, header, body, respHeader, respBody)
