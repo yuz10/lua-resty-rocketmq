@@ -376,6 +376,12 @@ function _M:start()
             ngx.sleep(30)
         end
     end)
+    ngx.timer.every(5, function()
+        for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
+            local mq = utils.buildMq(mqKey)
+            self.offsetStore:persist(mq);
+        end
+    end)
     if self.traceDispatcher then
         self.traceDispatcher:start()
     end
