@@ -3,6 +3,7 @@
 package.path = ';../lib/?.lua;' .. package.path
 
 local consumer = require "resty.rocketmq.consumer"
+local utils = require "resty.rocketmq.utils"
 
 local cid = { 1, 2, 3, 4 }
 for _, c in ipairs(cid) do
@@ -10,5 +11,5 @@ for _, c in ipairs(cid) do
     print(table.concat(res, ","))
 end
 
-
+print(utils.java_hash("32q"))
 

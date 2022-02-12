@@ -4,7 +4,6 @@ local core = require("resty.rocketmq.core")
 local split = require("resty.rocketmq.utils").split
 local decode = require("resty.rocketmq.json").decode
 
-local unpack = unpack
 local REQUEST_CODE = core.REQUEST_CODE
 local RESPONSE_CODE = core.RESPONSE_CODE
 local band = bit.band
@@ -53,8 +52,8 @@ function _M.setTimeout(self, timeout)
     self.timeout = timeout
 end
 
-function _M:request(code, addr, header, body, oneway)
-    return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS, self.timeout)
+function _M:request(code, addr, header, body, oneway, timeout)
+    return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS, timeout or self.timeout)
 end
 
 function _M:request1(code, addr, sock, header, body, processor)
@@ -208,9 +207,11 @@ local function findBrokerAddressInPublish(self, brokerName, topic)
     if map then
         return map[0]
     end
-    tryToFindTopicPublishInfo(self, topic)
-    local map = self.brokerAddrTable[brokerName]
-    return map and map[0]
+    if topic then
+        updateTopicRouteInfoFromNameserver(self, topic)
+        local map = self.brokerAddrTable[brokerName]
+        return map and map[0]
+    end
 end
 _M.findBrokerAddressInPublish = findBrokerAddressInPublish
 
@@ -278,7 +279,7 @@ function _M:updateConsumeOffsetToBroker(mq, offset)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
 
     return self:request(REQUEST_CODE.UPDATE_CONSUMER_OFFSET, brokerAddr, {
-        topic = mq.offset,
+        topic = mq.topic,
         consumerGroup = mq.consumerGroup,
         queueId = mq.queueId,
         commitOffset = offset,
@@ -324,6 +325,60 @@ function _M:sendHeartbeatToAllBroker(sock_map, heartbeatData)
             end
         end
     end
+end
+
+_M.FOUND = "FOUND"
+_M.NO_NEW_MSG = "NO_NEW_MSG"
+_M.NO_MATCHED_MSG = "NO_MATCHED_MSG"
+_M.OFFSET_ILLEGAL = "OFFSET_ILLEGAL"
+
+function _M:pullKernelImpl(brokerName, header, timeout)
+    local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    if not brokerAddr then
+        updateTopicRouteInfoFromNameserver(self, header.topic)
+        brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    end
+    local h, b, err = self:request(REQUEST_CODE.PULL_MESSAGE, brokerAddr, header, nil, false, timeout)
+    if not h then
+        return nil, err
+    end
+    local status
+    if h.code == RESPONSE_CODE.SUCCESS then
+        status = _M.FOUND
+    elseif h.code == RESPONSE_CODE.PULL_NOT_FOUND then
+        status = _M.NO_NEW_MSG
+    elseif h.code == RESPONSE_CODE.PULL_RETRY_IMMEDIATELY then
+        status = _M.NO_MATCHED_MSG
+    elseif h.code == RESPONSE_CODE.PULL_OFFSET_MOVED then
+        status = _M.OFFSET_ILLEGAL
+    else
+        return nil, ('pullKernelImpl return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    local res = h.extFields
+    res.pullStatus = status
+    local messages = {}
+    core.decodeMsgs(messages, b, true, false)
+    res.msgFoundList = messages
+    return res
+end
+
+function _M:sendMessageBack(brokerName, msg, consumerGroup, delayLevel, maxReconsumeTimes)
+    local brokerAddr = findBrokerAddressInPublish(self, brokerName, msg.topic)
+    local h, b, err = self:request(REQUEST_CODE.CONSUMER_SEND_MSG_BACK, brokerAddr, {
+        group = consumerGroup,
+        originTopic = msg.topic,
+        offset = msg.commitLogOffset,
+        delayLevel = delayLevel,
+        originMsgId = msg.msgId,
+        maxReconsumeTimes = maxReconsumeTimes,
+    })
+    if not h then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('sendMessageBack return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    return true
 end
 
 return _M

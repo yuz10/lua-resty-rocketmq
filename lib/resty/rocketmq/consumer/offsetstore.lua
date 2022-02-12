@@ -1,6 +1,4 @@
-local core = require("resty.rocketmq.core")
 local utils = require("resty.rocketmq.utils")
-local ngx = ngx
 
 ---@class offsetStore
 local _M = {}

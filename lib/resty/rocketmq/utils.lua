@@ -2,10 +2,8 @@ local bit = require("bit")
 local to_hex = require("resty.string").to_hex
 local tohex = bit.tohex
 local band = bit.band
-local bor = bit.bor
 local lshift = bit.lshift
 local rshift = bit.rshift
-local fmt = string.format
 local random = math.random
 local find, sub, append = string.find, string.sub, table.insert
 local byte = string.byte
@@ -248,6 +246,14 @@ end
 
 function _M.startsWith(s, prefix)
     return s:sub(1, #prefix) == prefix
+end
+
+function _M.java_hash(s)
+    local h = 0
+    for i = 1, #s do
+        h = 31 * h + byte(s, i);
+    end
+    return h
 end
 
 return _M

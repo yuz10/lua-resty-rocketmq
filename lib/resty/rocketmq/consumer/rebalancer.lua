@@ -1,15 +1,12 @@
 local core = require("resty.rocketmq.core")
 local utils = require("resty.rocketmq.utils")
-local trace = require("resty.rocketmq.trace")
 local cjson_safe = require("cjson.safe")
-local split = require("resty.rocketmq.utils").split
 local ngx = ngx
 local ngx_timer_at = ngx.timer.at
 local log = ngx.log
 local INFO = ngx.INFO
 local WARN = ngx.WARN
 local ERR = ngx.ERR
-local RESPONSE_CODE = core.RESPONSE_CODE
 
 ---@class rebalancer
 local _M = {}
@@ -26,6 +23,16 @@ function _M.new(consumer)
         processQueueTable = {},
     }, _M)
     return rebalancer
+end
+
+local processQueueMt = {}
+processQueueMt.__index = processQueueMt
+
+function processQueueMt:putMessage(msgs)
+    self.msgCount = self.msgCount + #msgs
+    for _, msg in ipairs(msgs) do
+        self.msgSize = self.msgSize + #msg.body
+    end
 end
 
 local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet)
@@ -45,20 +52,23 @@ local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet
             local mq = utils.buildMq(mqKey)
             self.consumer:removeDirtyOffset(mq)
             local now = ngx.now()
-            local pq = {
+            local pq = setmetatable({
+                msgSize = 0,
+                msgCount = 0,
                 lastPullTimestamp = now,
                 lastConsumeTimestamp = now,
-            }
+            }, processQueueMt)
             self.processQueueTable[mqKey] = pq
             local nextOffset, err = self.consumer:computePullFromWhere(mq)
+            print(cjson_safe.encode(mq), nextOffset)
             if not nextOffset then
                 log(INFO, "doRebalance, ", self.consumerGroup, ", compute offset failed, ", err)
             end
             table.insert(pullRequestList, {
                 consumerGroup = self.consumerGroup,
                 nextOffset = nextOffset,
-                mq = mq,
-                pq = pq,
+                messageQueue = mq,
+                processQueue = pq,
             })
             changed = true
         end
@@ -119,6 +129,16 @@ function _M:start()
         ngx_timer_at(20, loop)
     end
     ngx_timer_at(1, loop)
+end
+
+function _M:removeProcessQueue(mq)
+    local mqKey = utils.buildMqKey(mq)
+    local prev = self.processQueueTable[mqKey]
+    if prev then
+        prev.dropped = true
+        self.consumer:removeUnnecessaryMessageQueue(mq, prev)
+    end
+    self.processQueueTable[mqKey] = nil
 end
 
 return _M
