@@ -311,26 +311,34 @@ local function getByte(buffer, offset)
 end
 
 local function getShort(buffer, offset)
-    local res = lshift(byte(buffer, offset), 8) +
-            byte(buffer, offset + 1)
+    local res = bor(lshift(byte(buffer, offset), 8),
+            byte(buffer, offset + 1))
     return res, offset + 2
 end
 
 local function getInt(buffer, offset)
-    local res = lshift(byte(buffer, offset), 24) +
-            lshift(byte(buffer, offset + 1), 16) +
-            lshift(byte(buffer, offset + 2), 8) +
-            byte(buffer, offset + 3)
+    local res = bor(lshift(byte(buffer, offset), 24),
+            lshift(byte(buffer, offset + 1), 16),
+            lshift(byte(buffer, offset + 2), 8),
+            byte(buffer, offset + 3))
     return res, offset + 4
 end
 
 local function getLong(buffer, offset)
-    local res1, res2
-    res1, offset = getInt(buffer, offset)
-    res2, offset = getInt(buffer, offset)
-    local long = lshift(0ULL + res1, 32) + res2
-    return tostring(long):sub(0, -4), offset
+    local long = bor(
+            lshift(0ULL + byte(buffer, offset), 56),
+            lshift(0ULL + byte(buffer, offset + 1), 48),
+            lshift(0ULL + byte(buffer, offset + 2), 40),
+            lshift(0ULL + byte(buffer, offset + 3), 32),
+
+            lshift(0ULL + byte(buffer, offset + 4), 24),
+            lshift(byte(buffer, offset + 5), 16),
+            lshift(byte(buffer, offset + 6), 8),
+            byte(buffer, offset + 7)
+    )
+    return tostring(long):sub(0, -4), offset + 8
 end
+_M.getLong = getLong
 
 local function decodeHeader(recv)
     local serializeType = byte(recv, 1)
@@ -449,7 +457,7 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
 end
 _M.request = request
 
-_M.request1 = function(code, addr, sock, header, body, RPCHook, processor)
+_M.requestHeartbeat = function(code, addr, sock, header, body, RPCHook, processor)
     if RPCHook then
         for _, hook in ipairs(RPCHook) do
             hook:doBeforeRequest(addr, header, body)

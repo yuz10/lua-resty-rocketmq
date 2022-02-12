@@ -408,7 +408,6 @@ function _M:removeDirtyOffset(mq)
 end
 
 function _M:messageQueueChanged(topic, mqList, allocateResult)
-    log(WARN, 'messageQueueChanged:', topic, ',allocateResult:', cjson_safe.encode(allocateResult))
 end
 
 function _M:computePullFromWhere(mq)

@@ -60,7 +60,6 @@ local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet
             }, processQueueMt)
             self.processQueueTable[mqKey] = pq
             local nextOffset, err = self.consumer:computePullFromWhere(mq)
-            print(cjson_safe.encode(mq), nextOffset)
             if not nextOffset then
                 log(INFO, "doRebalance, ", self.consumerGroup, ", compute offset failed, ", err)
             end

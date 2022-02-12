@@ -56,8 +56,8 @@ function _M:request(code, addr, header, body, oneway, timeout)
     return core.request(code, addr, header, body, oneway, self.RPCHook, self.useTLS, timeout or self.timeout)
 end
 
-function _M:request1(code, addr, sock, header, body, processor)
-    return core.request1(code, addr, sock, header, body, self.RPCHook, processor)
+function _M:requestHeartbeat(code, addr, sock, header, body, processor)
+    return core.requestHeartbeat(code, addr, sock, header, body, self.RPCHook, processor)
 end
 
 function _M:chooseNameserver()
@@ -97,7 +97,7 @@ function _M:endTransactionOneway(brokerAddr, msg)
 end
 
 function _M:sendHeartbeat(addr, sock, heartbeatData, processor)
-    return self:request1(REQUEST_CODE.HEART_BEAT, addr, sock, {}, cjson_safe.encode(heartbeatData), processor)
+    return self:requestHeartbeat(REQUEST_CODE.HEART_BEAT, addr, sock, {}, cjson_safe.encode(heartbeatData), processor)
 end
 
 local function topicRouteData2TopicPublishInfo(topic, route)
@@ -354,12 +354,16 @@ function _M:pullKernelImpl(brokerName, header, timeout)
     else
         return nil, ('pullKernelImpl return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
     end
-    local res = h.extFields
-    res.pullStatus = status
     local messages = {}
     core.decodeMsgs(messages, b, true, false)
-    res.msgFoundList = messages
-    return res
+    return {
+        suggestWhichBrokerId = tonumber(h.extFields.suggestWhichBrokerId),
+        nextBeginOffset = tonumber(h.extFields.nextBeginOffset),
+        minOffset = tonumber(h.extFields.minOffset),
+        maxOffset = tonumber(h.extFields.maxOffset),
+        pullStatus = status,
+        msgFoundList = messages,
+    }
 end
 
 function _M:sendMessageBack(brokerName, msg, consumerGroup, delayLevel, maxReconsumeTimes)
