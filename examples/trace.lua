@@ -12,8 +12,8 @@ if not adm then
     print("new admin client err:", err)
     return
 end
-adm:createTopic("TBW102", "TopicTest", 8)
-adm:createTopic("TBW102", "Trace", 8)
+adm:createTopic("TopicTest", 8)
+adm:createTopic("Trace", 8)
 
 local p, err = producer.new(nameservers, "group", true, "Trace")
 if not p then

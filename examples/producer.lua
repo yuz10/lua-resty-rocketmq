@@ -14,7 +14,7 @@ if not adm then
     return
 end
 
-local _, err = adm:createTopic("TBW102", "TopicTest", 8)
+local _, err = adm:createTopic("TopicTest", 8)
 if err then
     print("create topic err:", err)
     return

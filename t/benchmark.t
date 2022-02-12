@@ -10,7 +10,7 @@ my $pwd = cwd();
 our $HttpConfig = qq{
     lua_package_path "$pwd/lib/?.lua;;";
     lua_package_cpath "/usr/local/openresty/lualib/?.so;/usr/local/openresty/lualib/?.so;;";
-    
+
     init_by_lua_block{
         require 'resty.core'
     }
@@ -33,7 +33,7 @@ __DATA__
             local producer = require "resty.rocketmq.producer"
 
             local adm, err = admin.new({ "127.0.0.1:9876"})
-            adm:createTopic("TBW102", "TopicTest", 8)
+            adm:createTopic("TopicTest", 8)
 
             local args = ngx.req.get_uri_args()
             local thread_num = tonumber(args.thread_num) or 4

@@ -26,7 +26,7 @@ if is(batch_size > 1) + is(delay_level) + is(transaction) > 1 then
 end
 
 local adm, err = admin.new({ "127.0.0.1:9876" })
-adm:createTopic("TBW102", topic, 8)
+adm:createTopic(topic, 8)
 
 local total_success = 0
 local total_error = 0

@@ -35,7 +35,7 @@ __DATA__
                 return
             end
 
-            local res, err = adm:createTopic("TBW102", "TopicTest", 1)
+            local res, err = adm:createTopic("TopicTest", 1)
             if not res then
                 ngx.say("create topic err:", err)
                 return

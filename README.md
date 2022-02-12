@@ -282,22 +282,19 @@ there is an acl hook provided, usage is:
 `timeout` is in milliseconds, default 3000
 
 #### createTopic
-`syntax: res, err = adm:createTopic(defaultTopic, newTopic, queueNum, topicSysFlag)`
+`syntax: res, err = adm:createTopic(newTopic, queueNum, topicSysFlag)`
 
-- defaultTopic: usually "TBW102"
 - newTopic: the new topic name
 - queueNum: read and write queue numbers
 - topicSysFlag: system flag of the topic
 
 
 #### createTopicForBroker
-`syntax: res, err = adm:createTopicForBroker(addr, defaultTopic, topicConfig)`
+`syntax: res, err = adm:createTopicForBroker(addr, topicConfig)`
 
 - addr: broker address
-- defaultTopic: usually "TBW102"
 - topicConfig: a table containing:
   - topic
-  - defaultTopic
   - readQueueNums
   - writeQueueNums
   - perm

@@ -43,14 +43,14 @@ function _M.setTimeout(self, timeout)
     self.client:setTimeout(timeout)
 end
 
-function _M.createTopic(self, defaultTopic, newTopic, queueNum, topicSysFlag)
+function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
     if not core.checkTopic(newTopic) then
         return nil, ('topic %s invalid format'):format(newTopic)
     end
     if core.isSystemTopic(newTopic) then
         return nil, ('topic %s is system topic'):format(newTopic)
     end
-    local h, b, err = self.client:getTopicRouteInfoFromNameserver(defaultTopic)
+    local h, b, err = self.client:getTopicRouteInfoFromNameserver("TBW102")
     if not h then
         return nil, err
     end
@@ -80,7 +80,7 @@ function _M.createTopic(self, defaultTopic, newTopic, queueNum, topicSysFlag)
         local addr = bd.brokerAddrs[0]
         if addr then
             local res, _
-            res, _, createErr = _M.createTopicForBroker(self, addr, defaultTopic, topicConfig)
+            res, _, createErr = _M.createTopicForBroker(self, addr, topicConfig)
             if res and res.code == RESPONSE_CODE.SUCCESS then
                 createOKAtLeastOnce = true
             else
@@ -94,10 +94,10 @@ function _M.createTopic(self, defaultTopic, newTopic, queueNum, topicSysFlag)
     return topicConfig
 end
 
-function _M.createTopicForBroker(self, addr, defaultTopic, topicConfig)
+function _M.createTopicForBroker(self, addr, topicConfig)
     return self.client:request(REQUEST_CODE.UPDATE_AND_CREATE_TOPIC, addr, {
         topic = topicConfig.topicName,
-        defaultTopic = defaultTopic,
+        defaultTopic = "TBW102",
         readQueueNums = topicConfig.readQueueNums or 16,
         writeQueueNums = topicConfig.writeQueueNums or 16,
         perm = topicConfig.perm or bor(core.PERM_READ, core.PERM_WRITE),

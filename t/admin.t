@@ -37,8 +37,8 @@ __DATA__
                 ngx.say("new admin client err:", err)
                 return
             end
-            adm:createTopic("TBW102", "AaTopic", 1)
-            adm:createTopic("TBW102", "BBTopic", 1)
+            adm:createTopic("AaTopic", 1)
+            adm:createTopic("BBTopic", 1)
 
             local p, err = producer.new(nameservers, "produce_group")
             if not p then

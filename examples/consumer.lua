@@ -10,7 +10,7 @@ c:subscribe("TopicTest")
 c:registerMessageListener({
     consumeMessage = function(self, msgs, context)
         print('----consume----', cjson_safe.encode(msgs))
-        return consumer.RECONSUME_LATER
+        return consumer.CONSUME_SUCCESS
     end
 })
 
