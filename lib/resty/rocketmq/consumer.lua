@@ -110,6 +110,7 @@ function _M.new(nameservers, consumerGroup, rpcHook)
         rpcHook = rpcHook,
         clientID = '127.0.0.1@' .. ngx.worker.pid() .. '#' .. (ngx.now() * 1000),
         consumeMessageHookList = {},
+        pullThreads = {},
     }, _M)
     for k, default in pairs(defaults) do
         consumer[k] = default
@@ -118,7 +119,6 @@ function _M.new(nameservers, consumerGroup, rpcHook)
     consumer.rebalancer = rebalancer.new(consumer)
     consumer.offsetStore = offsetstore.new(consumer)
     consumer.admin = admin.new(nameservers, cli)
-    consumer.pullRequestQueue = queue.new()
     return consumer
 end
 
@@ -285,29 +285,28 @@ local function submitConsumeRequest(self, msgFoundList, processQueue, messageQue
             end
         end
     end
+    processQueue:removeMessage(msgFoundList)
 end
 
-local function pullMessage(self, pullRequest)
-    local processQueue = pullRequest.processQueue
-    local messageQueue = pullRequest.messageQueue
-    if processQueue.dropped then
-        return
-    end
+local function pullMessage(self, messageQueue, processQueue)
     processQueue.lastPullTimestamp = ngx.now() * 1000
     local cachedMessageCount = processQueue.msgCount
     local cachedMessageSizeInMiB = processQueue.msgSize / (1024 * 1024)
     if cachedMessageCount > self.pullThresholdForQueue then
-        executePullRequestLater(self, pullRequest, PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL)
+        log(WARN, 'reached msg count limit ', cjson_safe.encode(messageQueue))
+        ngx.sleep(self.PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
         return
     end
     if cachedMessageSizeInMiB > self.pullThresholdSizeForQueue then
-        executePullRequestLater(self, pullRequest, PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL)
+        log(WARN, 'reached msg size limit ', cjson_safe.encode(messageQueue))
+        ngx.sleep(self.PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
         return
     end
 
     local sd = self.rebalancer.subscriptionInner[messageQueue.topic]
     if not sd then
-        executePullRequestLater(self, pullRequest, self.pullTimeDelayMillsWhenException)
+        log(WARN, "no subscription for ", cjson_safe.encode(messageQueue))
+        ngx.sleep(self.pullTimeDelayMillsWhenException / 1000)
         return
     end
     local commitOffsetValue = self.offsetStore:readOffset(messageQueue, offsetstore.READ_FROM_MEMORY)
@@ -316,7 +315,7 @@ local function pullMessage(self, pullRequest)
         consumerGroup = self.consumerGroup,
         topic = messageQueue.topic,
         queueId = messageQueue.queueId,
-        queueOffset = pullRequest.nextOffset,
+        queueOffset = processQueue.nextOffset,
         maxMsgNums = self.pullBatchSize,
         sysFlag = sysFlag,
         commitOffset = commitOffsetValue,
@@ -326,36 +325,34 @@ local function pullMessage(self, pullRequest)
         expressionType = sd.expressionType
     }, CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND)
     if err then
-        executePullRequestLater(self, pullRequest, self.pullTimeDelayMillsWhenException)
+        ngx.sleep(self.pullTimeDelayMillsWhenException / 1000)
         return
     end
     if pullResult.pullStatus == client.FOUND then
-        pullRequest.nextOffset = pullResult.nextBeginOffset
+        processQueue.nextOffset = pullResult.nextBeginOffset
         local msgFoundList = pullResult.msgFoundList
         if not msgFoundList or #msgFoundList == 0 then
-            executePullRequestImmediately(self, pullRequest)
+            return
         else
             processQueue:putMessage(msgFoundList)
             submitConsumeRequest(self, msgFoundList, processQueue, messageQueue)
+            self.offsetStore:updateOffset(messageQueue, pullResult.maxOffset + 1, true)
             if self.pullInterval > 0 then
-                executePullRequestLater(self, pullRequest, self.pullInterval)
-            else
-                executePullRequestImmediately(self, pullRequest)
+                ngx.sleep(self.pullInterval / 1000)
             end
+            return
         end
     elseif pullResult.pullStatus == client.NO_NEW_MSG or pullResult.pullStatus == client.NO_MATCHED_MSG then
-        pullRequest.nextOffset = pullResult.nextBeginOffset
+        processQueue.nextOffset = pullResult.nextBeginOffset
         if processQueue.msgCount == 0 then
-            self.offsetStore:updateOffset(messageQueue, pullRequest.nextOffset, true)
+            self.offsetStore:updateOffset(messageQueue, processQueue.nextOffset, true)
         end
-        executePullRequestImmediately(self, pullRequest)
     else
-        pullRequest.processQueue.dropped = true
-        self.offsetStore:updateOffset(messageQueue, pullRequest.nextOffset, false)
+        processQueue.dropped = true
+        self.offsetStore:updateOffset(messageQueue, processQueue.nextOffset, false)
         self.offsetStore:persist(messageQueue)
         self.rebalancer:removeProcessQueue(messageQueue)
     end
-
 end
 
 function _M:start()
@@ -385,16 +382,7 @@ function _M:start()
     if self.traceDispatcher then
         self.traceDispatcher:start()
     end
-    ngx_timer_at(0, function()
-        while self.running do
-            local pullRequest = queue.pop(self.pullRequestQueue)
-            if pullRequest then
-                pullMessage(self, pullRequest)
-            else
-                ngx.sleep(1)
-            end
-        end
-    end)
+
 end
 
 function _M:stop()
@@ -414,6 +402,32 @@ function _M:removeDirtyOffset(mq)
 end
 
 function _M:messageQueueChanged(topic, mqList, allocateResult)
+    for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
+        if not self.pullThreads[mqKey] then
+            ngx_timer_at(0, function(_, mqKey)
+                local messageQueue = utils.buildMq(mqKey)
+                while self.running do
+                    local processQueue = self.rebalancer.processQueueTable[mqKey]
+                    if not processQueue then
+                        log(WARN, 'nil processQueue ', mqKey)
+                        break
+                    end
+                    if not processQueue or processQueue.dropped then
+                        log(WARN, 'dropped ', mqKey)
+                        break
+                    end
+                    pullMessage(self, messageQueue, processQueue)
+                end
+                self.pullThreads[mqKey] = nil
+            end, mqKey)
+            self.pullThreads[mqKey] = true
+        end
+    end
+    local mqKeys = ''
+    for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
+        mqKeys = mqKeys .. mqKey .. ';'
+    end
+    log(WARN, 'messageQueueChanged:', mqKeys)
 end
 
 function _M:computePullFromWhere(mq)
@@ -438,12 +452,6 @@ function _M:computePullFromWhere(mq)
         else
             return self.admin:searchOffset(mq, self.consumeTimestamp)
         end
-    end
-end
-
-function _M:dispatchPullRequest(pullRequestList)
-    for _, pullRequest in ipairs(pullRequestList) do
-        executePullRequestImmediately(self, pullRequest)
     end
 end
 

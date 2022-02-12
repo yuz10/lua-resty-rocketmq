@@ -29,9 +29,23 @@ local processQueueMt = {}
 processQueueMt.__index = processQueueMt
 
 function processQueueMt:putMessage(msgs)
-    self.msgCount = self.msgCount + #msgs
     for _, msg in ipairs(msgs) do
-        self.msgSize = self.msgSize + #msg.body
+        if self.msgMap[msg.queueOffset] == nil then
+            self.msgCount = self.msgCount + 1
+            self.msgSize = self.msgSize + #msg.body
+            self.msgMap[msg.queueOffset] = #msg.body
+        end
+    end
+end
+
+function processQueueMt:removeMessage(msgs)
+    for _, msg in ipairs(msgs) do
+        local size = self.msgMap[msg.queueOffset]
+        if size then
+            self.msgCount = self.msgCount - 1
+            self.msgSize = self.msgSize - size
+            self.msgMap[msg.queueOffset] = nil
+        end
     end
 end
 
@@ -46,33 +60,27 @@ local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet
             end
         end
     end
-    local pullRequestList = {}
     for mqKey, _ in pairs(allocateResultSet) do
         if not self.processQueueTable[mqKey] then
             local mq = utils.buildMq(mqKey)
             self.consumer:removeDirtyOffset(mq)
             local now = ngx.now()
+            local nextOffset, err = self.consumer:computePullFromWhere(mq)
+            if not nextOffset then
+                log(INFO, "doRebalance, ", self.consumerGroup, ", compute offset failed, ", err)
+            end
             local pq = setmetatable({
                 msgSize = 0,
                 msgCount = 0,
                 lastPullTimestamp = now,
                 lastConsumeTimestamp = now,
+                msgMap = {},
+                nextOffset = nextOffset,
             }, processQueueMt)
             self.processQueueTable[mqKey] = pq
-            local nextOffset, err = self.consumer:computePullFromWhere(mq)
-            if not nextOffset then
-                log(INFO, "doRebalance, ", self.consumerGroup, ", compute offset failed, ", err)
-            end
-            table.insert(pullRequestList, {
-                consumerGroup = self.consumerGroup,
-                nextOffset = nextOffset,
-                messageQueue = mq,
-                processQueue = pq,
-            })
             changed = true
         end
     end
-    self.consumer:dispatchPullRequest(pullRequestList)
     return changed
 end
 
