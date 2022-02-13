@@ -27,12 +27,47 @@ Table of Contents
             * [batchSend](#batchSend)
             * [start](#start)
             * [stop](#stop)
+    * [resty.rocketmq.consumer](#restyrocketmqconsumer)
+        * [Methods](#methods-1)
+            * [new](#new-1)
+            * [addRPCHook](#addRPCHook-1)
+            * [setUseTLS](#setUseTLS-1)
+            * [setTimeout](#setTimeout-1)
+            * [registerMessageListener](#registerMessageListener)
+            * [registerConsumeMessageHook](#registerConsumeMessageHook)
+            * [subscribe](#subscribe)
+            * [start](#start-1)
+            * [stop](#stop-1)
+            * [setAllocateMessageQueueStrategy](#setAllocateMessageQueueStrategy)
+            * [getAllocateMessageQueueStrategy](#getAllocateMessageQueueStrategy)
+            * [setEnableMsgTrace](#setEnableMsgTrace)
+            * [getEnableMsgTrace](#getEnableMsgTrace)
+            * [setCustomizedTraceTopic](#setCustomizedTraceTopic)
+            * [getCustomizedTraceTopic](#getCustomizedTraceTopic)
+            * [setConsumeFromWhere](#setConsumeFromWhere)
+            * [getConsumeFromWhere](#getConsumeFromWhere)
+            * [setConsumeTimestamp](#setConsumeTimestamp)
+            * [getConsumeTimestamp](#getConsumeTimestamp)
+            * [setPullThresholdForQueue](#setPullThresholdForQueue)
+            * [getPullThresholdForQueue](#getPullThresholdForQueue)
+            * [setPullThresholdSizeForQueue](#setPullThresholdSizeForQueue)
+            * [getPullThresholdSizeForQueue](#getPullThresholdSizeForQueue)
+            * [setPullTimeDelayMillsWhenException](#setPullTimeDelayMillsWhenException)
+            * [getPullTimeDelayMillsWhenException](#getPullTimeDelayMillsWhenException)
+            * [setPullBatchSize](#setPullBatchSize)
+            * [getPullBatchSize](#getPullBatchSize)
+            * [setPullInterval](#setPullInterval)
+            * [getPullInterval](#getPullInterval)
+            * [setConsumeMessageBatchMaxSize](#setConsumeMessageBatchMaxSize)
+            * [getConsumeMessageBatchMaxSize](#getConsumeMessageBatchMaxSize)
+            * [setMaxReconsumeTimes](#setMaxReconsumeTimes)
+            * [getMaxReconsumeTimes](#getMaxReconsumeTimes)
     * [resty.rocketmq.admin](#restyrocketmqadmin)
-      * [Methods](#methods)
-          * [new](#new-1)
-          * [addRPCHook](#addRPCHook-1)
-          * [setUseTLS](#setUseTLS-1)
-          * [setTimeout](#setTimeout-1)
+      * [Methods](#methods-2)
+          * [new](#new-2)
+          * [addRPCHook](#addRPCHook-2)
+          * [setUseTLS](#setUseTLS-2)
+          * [setTimeout](#setTimeout-2)
           * [createTopic](#createTopic)
           * [createTopicForBroker](#createTopicForBroker)
           * [searchOffset](#searchOffset)
@@ -81,7 +116,7 @@ nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
 
-### run examples
+### run examples of this project
 ```shell
 cd examples
 chmod +x producer.lua
@@ -96,13 +131,12 @@ Synopsis
 
     server {
         location /test {
-            content_by_lua '
+            content_by_lua_block {
                 local cjson = require "cjson"
                 local producer = require "resty.rocketmq.producer"
+                local consumer = require "resty.rocketmq.consumer"
 
-                local nameservers = {
-                    "127.0.0.1:9876",
-                }
+                local nameservers = { "127.0.0.1:9876" }
 
                 local message = "halo world"
 
@@ -121,8 +155,21 @@ Synopsis
                     return
                 end
                 ngx.say("send success")
-
-            ';
+                
+                -- consume
+                local c = consumer.new(nameservers, "group1")
+                c:subscribe("TopicTest", "*")
+                c:registerMessageListener({
+                    consumeMessage = function(self, msgs, context)
+                        ngx.say("consume success:", cjson.encode(msgs))
+                        return consumer.CONSUME_SUCCESS
+                    end
+                })
+                
+                c:start()
+                ngx.sleep(5)
+                c:stop()
+            }
         }
     }
 ```
@@ -142,8 +189,6 @@ To load this module, just do this
 ```lua
     local producer = require "resty.rocketmq.producer"
 ```
-
-[Back to TOC](#table-of-contents)
 
 ### Methods
 
@@ -264,6 +309,163 @@ note that if you don't call p:start() before sending messages, messages will be 
 [Back to TOC](#table-of-contents)
 
 
+resty.rocketmq.consumer
+----------------------
+
+To load this module, just do this
+
+```lua
+    local consumer = require "resty.rocketmq.consumer"
+```
+
+### Methods
+
+#### new
+
+`syntax: c = consumer.new(nameservers, consumerGroup)`
+
+`nameservers` is list of nameserver addresses
+
+#### addRPCHook
+
+`syntax: c:addRPCHook(hook)`
+
+`hook` is a table that contains two functions as follows:
+
+- `doBeforeRequest(self, addr, header, body)`
+- `doAfterResponse(self, addr, header, body, respHeader, respBody)`
+
+there is an acl hook provided, usage is:
+```lua
+    local accessKey, secretKey = "RocketMQ", "12345678"
+    local aclHook = require("resty.rocketmq.acl_rpchook").new(accessKey, secretKey)
+    c:addRPCHook(aclHook)
+```
+
+#### setUseTLS
+
+`syntax: c:setUseTLS(useTLS)`
+
+`useTLS` is a boolean
+
+#### setTimeout
+
+`syntax: c:setTimeout(timeout)`
+
+`timeout` is in milliseconds, default 3000
+
+#### registerMessageListener
+
+`syntax: c:registerMessageListener(messageListener)`
+
+`messageListener` is a table that contains a function as follows:
+- `consumeMessage(self, msgs, context)`
+
+#### registerConsumeMessageHook
+
+`syntax: c:registerConsumeMessageHook(hook)`
+
+`hook` is a table that contains two functions as follows:
+- `consumeMessageBefore(self, context)`
+- `consumeMessageAfter(self, context)`
+
+`context` is a table that contains:
+- consumerGroup
+- mq
+- msgList
+- success
+- status
+- consumeContextType
+
+#### subscribe
+
+`syntax: c:subscribe(topic, subExpression)`
+
+#### start
+`syntax: c:start()`
+
+#### stop
+`syntax: c:stop()`
+
+#### setAllocateMessageQueueStrategy
+`syntax: c:setAllocateMessageQueueStrategy(strategy)`
+
+`strategy` is a functions as follows:
+- `function(consumerGroup, currentCID, mqAll, cidAll)`
+
+default value is `consumer.AllocateMessageQueueAveragely`
+
+#### getAllocateMessageQueueStrategy
+`syntax: local strategy = c:getAllocateMessageQueueStrategy()`
+
+#### setEnableMsgTrace
+`syntax: c:setEnableMsgTrace(enableMsgTrace)`
+
+#### getEnableMsgTrace
+`syntax: local enableMsgTrace = c:getEnableMsgTrace()`
+
+#### setCustomizedTraceTopic
+`syntax: c:setCustomizedTraceTopic(customizedTraceTopic)`
+
+#### getCustomizedTraceTopic
+`syntax: local customizedTraceTopic = c:getCustomizedTraceTopic()`
+
+#### setConsumeFromWhere
+`syntax: c:setConsumeFromWhere(consumeFromWhere)`
+
+#### getConsumeFromWhere
+`syntax: local consumeFromWhere = c:getConsumeFromWhere()`
+
+#### setConsumeTimestamp
+`syntax: c:setConsumeTimestamp(consumeTimestamp)`
+
+#### getConsumeTimestamp
+`syntax: local consumeTimestamp = c:getConsumeTimestamp()`
+
+#### setPullThresholdForQueue
+`syntax: c:setPullThresholdForQueue(pullThresholdForQueue)`
+
+#### getPullThresholdForQueue
+`syntax: local pullThresholdForQueue = c:getPullThresholdForQueue()`
+
+#### setPullThresholdSizeForQueue
+`syntax: c:setPullThresholdSizeForQueue(pullThresholdSizeForQueue)`
+
+#### getPullThresholdSizeForQueue
+`syntax: local pullThresholdSizeForQueue = c:getPullThresholdSizeForQueue()`
+
+#### setPullTimeDelayMillsWhenException
+`syntax: c:setPullTimeDelayMillsWhenException(pullTimeDelayMillsWhenException)`
+
+#### getPullTimeDelayMillsWhenException
+`syntax: local pullTimeDelayMillsWhenException = c:getPullTimeDelayMillsWhenException()`
+
+#### setPullBatchSize
+`syntax: c:setPullBatchSize(pullBatchSize)`
+
+#### getPullBatchSize
+`syntax: local pullBatchSize = c:getPullBatchSize()`
+
+#### setPullInterval
+`syntax: c:setPullInterval(pullInterval)`
+
+#### getPullInterval
+`syntax: local pullInterval = c:getPullInterval()`
+
+#### setConsumeMessageBatchMaxSize
+`syntax: c:setConsumeMessageBatchMaxSize(consumeMessageBatchMaxSize)`
+
+#### getConsumeMessageBatchMaxSize
+`syntax: local consumeMessageBatchMaxSize = c:getConsumeMessageBatchMaxSize()`
+
+#### setMaxReconsumeTimes
+`syntax: c:setMaxReconsumeTimes(maxReconsumeTimes)`
+
+#### getMaxReconsumeTimes
+`syntax: local maxReconsumeTimes = c:getMaxReconsumeTimes()`
+
+[Back to TOC](#table-of-contents)
+
 resty.rocketmq.admin
 ----------------------
 
@@ -272,8 +474,6 @@ To load this module, just do this
 ```lua
     local admin = require "resty.rocketmq.admin"
 ```
-
-[Back to TOC](#table-of-contents)
 
 ### Methods
 
@@ -308,7 +508,7 @@ there is an acl hook provided, usage is:
 
 #### setTimeout
 
-`syntax: p:setTimeout(timeout)`
+`syntax: adm:setTimeout(timeout)`
 
 `timeout` is in milliseconds, default 3000
 

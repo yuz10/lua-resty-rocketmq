@@ -9,7 +9,7 @@ local c = consumer.new({ "127.0.0.1:9876" }, "group1")
 c:subscribe("TopicTest")
 c:registerMessageListener({
     consumeMessage = function(self, msgs, context)
-        print('----consume----', cjson_safe.encode(msgs))
+        print('consume:', cjson_safe.encode(msgs))
         return consumer.CONSUME_SUCCESS
     end
 })

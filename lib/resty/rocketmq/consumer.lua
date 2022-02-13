@@ -95,7 +95,7 @@ local defaults = {
     maxReconsumeTimes = 16,
 }
 
-function _M.new(nameservers, consumerGroup, rpcHook)
+function _M.new(nameservers, consumerGroup)
     local cli, err = client.new(nameservers)
     if not cli then
         return nil, err
@@ -104,7 +104,6 @@ function _M.new(nameservers, consumerGroup, rpcHook)
     local consumer = setmetatable({
         nameservers = nameservers,
         consumerGroup = consumerGroup,
-        rpcHook = rpcHook,
         clientID = '127.0.0.1@' .. ngx.worker.pid() .. '#' .. (ngx.now() * 1000),
         consumeMessageHookList = {},
         pullThreads = {},
