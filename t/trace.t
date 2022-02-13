@@ -55,8 +55,9 @@ __DATA__
             p:stop()
             ngx.say("send success")
             ngx.log(ngx.WARN, require("cjson").encode(res.sendResult))
+            ngx.sleep(1)
 
-            -----------------viewMessage
+            -----------------queryTraceByMsgId
             local trace, err = adm:queryTraceByMsgId("Trace", res.sendResult.msgId)
             if not trace then
                 ngx.say("query trace err:", err)
