@@ -1,8 +1,8 @@
 package = "lua-resty-rocketmq"
-version = "0.3.1-0"
+version = "0.4.0-0"
 source = {
    url = "git://github.com/yuz10/lua-resty-rocketmq.git",
-   tag = "0.3.1-0"
+   tag = "0.4.0-0"
 }
 description = {
    summary = "Lua RocketMQ client driver for the ngx_lua based on the cosocket API",
@@ -22,9 +22,12 @@ dependencies = {
 build = {
    type = "builtin",
    modules = {
+      ["resty.rocketmq.consumer.offsetstore"] = "lib/resty/rocketmq/consumer/offsetstore.lua",
+      ["resty.rocketmq.consumer.rebalancer"] = "lib/resty/rocketmq/consumer/rebalancer.lua",
       ["resty.rocketmq.acl_rpchook"] = "lib/resty/rocketmq/acl_rpchook.lua",
       ["resty.rocketmq.admin"] = "lib/resty/rocketmq/admin.lua",
       ["resty.rocketmq.client"] = "lib/resty/rocketmq/client.lua",
+      ["resty.rocketmq.consumer"] = "lib/resty/rocketmq/consumer.lua",
       ["resty.rocketmq.core"] = "lib/resty/rocketmq/core.lua",
       ["resty.rocketmq.json"] = "lib/resty/rocketmq/json.lua",
       ["resty.rocketmq.producer"] = "lib/resty/rocketmq/producer.lua",
