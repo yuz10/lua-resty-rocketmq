@@ -16,8 +16,8 @@ _M.Pub = "Pub"
 _M.SubBefore = "SubBefore"
 _M.SubAfter = "SubAfter"
 _M.EndTransaction = "EndTransaction"
-local CONTENT_SPLITOR = string.char(1)
-local FIELD_SPLITOR = string.char(2)
+local CONTENT_SPLITTER = string.char(1)
+local FIELD_SPLITTER = string.char(2)
 
 function _M.new(nameservers, type, customizedTraceTopic)
     local producer = require("resty.rocketmq.producer")
@@ -36,24 +36,29 @@ function produceHook.sendMessageBefore(self, context)
     context.traceContext = {
         traceType = _M.Pub,
         groupName = context.producerGroup,
-        topic = context.message.topic,
-        tags = context.message.properties.TAGS or '',
-        keys = context.message.properties.KEYS or '',
-        storeHost = context.brokerAddr,
-        bodyLength = #context.message.body,
-        msgType = context.msgType,
+        traceBeans = {
+            {
+                topic = context.message.topic,
+                tags = context.message.properties.TAGS or '',
+                keys = context.message.properties.KEYS or '',
+                storeHost = context.brokerAddr,
+                bodyLength = #context.message.body,
+                msgType = context.msgType,
+            }
+        },
         timestamp = ngx.now() * 1000,
     }
 end
 
 function produceHook.sendMessageAfter(self, context)
-    local traceContext = context.traceContext or {}
+    local traceContext = context.traceContext
     traceContext.costTime = ngx.now() * 1000 - traceContext.timestamp
     if context.sendResult then
         traceContext.success = true
-        traceContext.msgId = context.sendResult.msgId
-        traceContext.offsetMsgId = context.sendResult.offsetMsgId
-        traceContext.storeTime = traceContext.timestamp + traceContext.costTime / 2
+        local traceBean = traceContext.traceBeans[1]
+        traceBean.msgId = context.sendResult.msgId
+        traceBean.offsetMsgId = context.sendResult.offsetMsgId
+        traceBean.storeTime = traceContext.timestamp + traceContext.costTime / 2
     else
         traceContext.success = false
     end
@@ -64,83 +69,155 @@ function produceHook.endTransaction(self, context)
     local traceContext = {
         traceType = _M.EndTransaction,
         groupName = context.producerGroup,
-        topic = context.message.topic,
-        tags = context.message.properties.TAGS or '',
-        keys = context.message.properties.KEYS or '',
-        storeHost = context.brokerAddr,
-        msgType = core.Trans_msg_Commit,
-        msgId = context.msgId,
-        transactionState = context.transactionState,
-        transactionId = context.transactionId,
-        fromTransactionCheck = context.fromTransactionCheck,
+        traceBeans = {
+            {
+                topic = context.message.topic,
+                tags = context.message.properties.TAGS or '',
+                keys = context.message.properties.KEYS or '',
+                storeHost = context.brokerAddr,
+                msgType = core.Trans_msg_Commit,
+                msgId = context.msgId,
+                transactionState = context.transactionState,
+                transactionId = context.transactionId,
+                fromTransactionCheck = context.fromTransactionCheck,
+            }
+        },
         timestamp = ngx.now() * 1000,
     }
     queue.push(self.queue, traceContext)
 end
 
 function consumeHook.consumeMessageBefore(self, context)
-    -- consumer not supported
+    if #context.msgList == 0 then
+        return
+    end
+    context.traceContext = {
+        traceType = _M.SubBefore,
+        groupName = context.consumerGroup,
+        timestamp = ngx.now() * 1000,
+        requestId = utils.genUniqId(),
+        traceBeans = {},
+    }
+    for _, message in ipairs(context.msgList) do
+        table.insert(context.traceContext.traceBeans, {
+            topic = message.topic,
+            msgId = message.properties.UNIQ_KEY,
+            tags = message.properties.TAGS or '',
+            keys = message.properties.KEYS or '',
+            storeTime = message.storeTimestamp,
+            bodyLength = message.storeSize,
+            retryTimes = message.reconsumeTimes,
+        })
+    end
+    queue.push(self.queue, context.traceContext)
 end
 
 function consumeHook.consumeMessageAfter(self, context)
-    -- consumer not supported
+    local subBeforeContext = context.traceContext
+    if #subBeforeContext.traceBeans == 0 then
+        return
+    end
+    local subAfterContext = {
+        traceType = _M.SubAfter,
+        groupName = subBeforeContext.consumerGroup,
+        timestamp = ngx.now() * 1000,
+        requestId = subBeforeContext.requestId,
+        success = context.success,
+        costTime = (ngx.now() * 1000 - subBeforeContext.timestamp) / #context.msgList,
+        traceBeans = subBeforeContext.traceBeans,
+        contextCode = context.consumeContextType,
+    }
+    queue.push(self.queue, subAfterContext)
 end
 
 local function encoderFromContextBean(ctx)
-    local data
+    local data = ''
     local traceType = ctx.traceType
     if traceType == _M.Pub then
-        data = table.concat({
-            ctx.traceType,
-            ctx.timestamp,
-            "DefaultRegion",
-            ctx.groupName,
-            ctx.topic,
-            ctx.msgId,
-            ctx.tags,
-            ctx.keys,
-            ctx.storeHost,
-            ctx.bodyLength,
-            ctx.costTime,
-            ctx.msgType,
-            ctx.offsetMsgId,
-            tostring(ctx.success)
-        }, CONTENT_SPLITOR) .. FIELD_SPLITOR
+        for _, bean in ipairs(ctx.traceBeans) do
+            data = data .. table.concat({
+                ctx.traceType,
+                ctx.timestamp,
+                "DefaultRegion",
+                ctx.groupName,
+                bean.topic,
+                bean.msgId,
+                bean.tags,
+                bean.keys,
+                bean.storeHost,
+                bean.bodyLength,
+                ctx.costTime,
+                bean.msgType,
+                bean.offsetMsgId,
+                tostring(ctx.success)
+            }, CONTENT_SPLITTER) .. FIELD_SPLITTER
+        end
     elseif traceType == _M.EndTransaction then
-        data = table.concat({
-            ctx.traceType,
-            ctx.timestamp,
-            "DefaultRegion",
-            ctx.groupName,
-            ctx.topic,
-            ctx.msgId,
-            ctx.tags,
-            ctx.keys,
-            ctx.storeHost,
-            ctx.msgType,
-            ctx.transactionId,
-            ctx.transactionState,
-            tostring(ctx.fromTransactionCheck)
-        }, CONTENT_SPLITOR) .. FIELD_SPLITOR
-    end
-    local keySet = {}
-    local keys = utils.split(ctx.keys, ' ')
-    for _, k in ipairs(keys) do
-        if k ~= '' then
-            keySet[k] = true
+        for _, bean in ipairs(ctx.traceBeans) do
+            data = data .. table.concat({
+                ctx.traceType,
+                ctx.timestamp,
+                "DefaultRegion",
+                ctx.groupName,
+                bean.topic,
+                bean.msgId,
+                bean.tags,
+                bean.keys,
+                bean.storeHost,
+                bean.msgType,
+                bean.transactionId,
+                bean.transactionState,
+                tostring(bean.fromTransactionCheck)
+            }, CONTENT_SPLITTER) .. FIELD_SPLITTER
+        end
+    elseif traceType == _M.SubBefore then
+        for _, bean in ipairs(ctx.traceBeans) do
+            data = data .. table.concat({
+                ctx.traceType,
+                ctx.timestamp,
+                "DefaultRegion",
+                ctx.groupName,
+                ctx.requestId,
+                bean.msgId,
+                bean.retryTimes,
+                bean.keys,
+            }, CONTENT_SPLITTER) .. FIELD_SPLITTER
+        end
+    elseif traceType == _M.SubAfter then
+        for _, bean in ipairs(ctx.traceBeans) do
+            data = data .. table.concat({
+                ctx.traceType,
+                ctx.requestId,
+                bean.msgId,
+                ctx.costTime,
+                tostring(ctx.success),
+                bean.keys,
+                ctx.contextCode,
+                ctx.timestamp,
+                ctx.groupName,
+            }, CONTENT_SPLITTER) .. FIELD_SPLITTER
         end
     end
-    keySet[ctx.msgId] = true
+    local keySet = {}
+    for _, bean in ipairs(ctx.traceBeans) do
+        local keys = utils.split(bean.keys, ' ')
+        for _, k in ipairs(keys) do
+            if k ~= '' then
+                keySet[k] = true
+            end
+        end
+        keySet[bean.msgId] = true
+    end
     return {
         key = keySet, data = data
     }
 end
 
 function _M.decoderFromTraceDataString(traceData)
-    local contextList = utils.split(traceData, FIELD_SPLITOR)
+    local contextList = utils.split(traceData, FIELD_SPLITTER)
     local resList = {}
     for _, context in ipairs(contextList) do
-        local line = utils.split(context, CONTENT_SPLITOR)
+        local line = utils.split(context, CONTENT_SPLITTER)
         if line[1] == _M.Pub then
             local pubContext = {
                 traceType = _M.Pub,
@@ -196,19 +273,19 @@ function _M.decoderFromTraceDataString(traceData)
             table.insert(resList, subAfterContext)
         elseif line[1] == _M.EndTransaction then
             table.insert(resList, {
-                TraceType = _M.EndTransaction,
-                TimeStamp = tonumber(line[2]),
-                RegionId = line[3],
-                GroupName = line[4],
-                Topic = line[5],
-                MsgId = line[6],
-                Tags = line[7],
-                Keys = line[8],
-                StoreHost = line[9],
-                MsgType = core.msgType[tonumber(line[10])],
-                TransactionId = line[11],
-                TransactionState = line[12],
-                FromTransactionCheck = line[13] == 'true',
+                traceType = _M.EndTransaction,
+                timeStamp = tonumber(line[2]),
+                regionId = line[3],
+                groupName = line[4],
+                topic = line[5],
+                msgId = line[6],
+                tags = line[7],
+                keys = line[8],
+                storeHost = line[9],
+                msgType = core.msgType[tonumber(line[10])],
+                transactionId = line[11],
+                transactionState = line[12],
+                fromTransactionCheck = line[13] == 'true',
             })
         end
     end
@@ -238,7 +315,7 @@ local function sendTrace(self)
     if #ctxList > 0 then
         local dataMap = {}
         for _, ctx in ipairs(ctxList) do
-            local topic = ctx.topic
+            local topic = ctx.traceBeans[1].topic
             dataMap[topic] = dataMap[topic] or {}
             table.insert(dataMap[topic], encoderFromContextBean(ctx))
         end

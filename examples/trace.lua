@@ -4,6 +4,7 @@ package.path = ';../lib/?.lua;' .. package.path
 
 local cjson = require("cjson")
 local producer = require "resty.rocketmq.producer"
+local consumer = require "resty.rocketmq.consumer"
 local admin = require "resty.rocketmq.admin"
 
 local nameservers = { "127.0.0.1:9876" }
@@ -33,10 +34,25 @@ print("send success: " .. cjson.encode(res.sendResult))
 -- call stop() to wait to finish trace sending
 p:stop()
 
+local c = consumer.new(nameservers, "group1")
+c:subscribe("TopicTest")
+c:setEnableMsgTrace(true)
+c:setCustomizedTraceTopic("Trace")
+c:registerMessageListener({
+    consumeMessage = function(self, msgs, context)
+        print('consume success:', cjson.encode(msgs))
+        return consumer.CONSUME_SUCCESS
+    end
+})
+
+c:start()
+ngx.sleep(10)
+c:stop()
+
 -----------------viewMessage
-local msg, err = adm:queryTraceByMsgId("Trace", res.sendResult.msgId)
-if not msg then
+local trace, err = adm:queryTraceByMsgId("Trace", res.sendResult.msgId)
+if not trace then
     print("queryTraceByMsgId err:", err)
     return
 end
-print("queryTraceByMsgId: " .. cjson.encode(msg))
+print("queryTraceByMsgId: " .. cjson.encode(trace))

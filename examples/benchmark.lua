@@ -8,7 +8,7 @@ local core = require "resty.rocketmq.core"
 
 local thread_num = 10
 local msg_size = 120
-local topic = "TopicTest"
+local topic = "BenchmarkTest"
 local trace_enable = false
 local delay_level = nil
 local use_tls = false

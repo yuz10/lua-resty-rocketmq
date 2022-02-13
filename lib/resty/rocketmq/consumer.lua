@@ -119,11 +119,15 @@ function _M.new(nameservers, consumerGroup, rpcHook)
     return consumer
 end
 
-for k, default in pairs(defaults) do
+for k, _ in pairs(defaults) do
     local setterFnName = 'set' .. k:sub(1, 1):upper() .. k:sub(2)
     local getterFnName = 'get' .. k:sub(1, 1):upper() .. k:sub(2)
     _M[setterFnName] = function(self, value)
-        self[k] = value or default
+        if self.running then
+            return nil, 'cant set property after start'
+        end
+        self[k] = value
+        return true
     end
     _M[getterFnName] = function(self)
         return self[k]
@@ -272,8 +276,28 @@ local function submitConsumeRequest(self, msgFoundList, processQueue, messageQue
                 break
             end
         end
-        -- todo ConsumeMessageHook
+        local consumeMessageContext
+        if #self.consumeMessageHookList > 0 then
+            consumeMessageContext = {
+                consumerGroup = self.consumerGroup,
+                mq = messageQueue,
+                msgList = msgs,
+                success = false,
+            }
+            for _, hook in ipairs(self.consumeMessageHookList) do
+                hook:consumeMessageBefore(consumeMessageContext)
+            end
+        end
         local status = messageListener:consumeMessage(msgs, context)
+        status = status or _M.RECONSUME_LATER
+        if #self.consumeMessageHookList > 0 then
+            consumeMessageContext.status = status
+            consumeMessageContext.success = status == _M.CONSUME_SUCCESS
+            consumeMessageContext.consumeContextType = status == _M.CONSUME_SUCCESS and 'SUCCESS' or 'FAILED'
+            for _, hook in ipairs(self.consumeMessageHookList) do
+                hook:consumeMessageAfter(consumeMessageContext)
+            end
+        end
         local delayLevel = context.delayLevelWhenNextConsume or 0
         if status ~= _M.CONSUME_SUCCESS then
             for _, msg in ipairs(msgs) do
@@ -401,6 +425,11 @@ function _M:removeDirtyOffset(mq)
 end
 
 function _M:messageQueueChanged(topic, mqList, allocateResult)
+    local mqKeys = ''
+    for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
+        mqKeys = mqKeys .. mqKey .. ';'
+    end
+    log(WARN, 'messageQueueChanged:', mqKeys)
     for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
         if not self.pullThreads[mqKey] then
             ngx_timer_at(0, function(_, mqKey)
@@ -422,11 +451,6 @@ function _M:messageQueueChanged(topic, mqList, allocateResult)
             self.pullThreads[mqKey] = true
         end
     end
-    local mqKeys = ''
-    for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
-        mqKeys = mqKeys .. mqKey .. ';'
-    end
-    log(WARN, 'messageQueueChanged:', mqKeys)
 end
 
 function _M:computePullFromWhere(mq)
