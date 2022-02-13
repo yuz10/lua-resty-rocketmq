@@ -11,6 +11,7 @@ Table of Contents
 * [Name](#name)
 * [Status](#status)
 * [Description](#description)
+* [Quick start](#quickstart)
 * [Synopsis](#synopsis)
 * [Modules](#modules)
     * [resty.rocketmq.producer](#restyrocketmqproducer)
@@ -56,6 +57,36 @@ This Lua library is a RocketMq client driver for the ngx_lua nginx module:
 
 This Lua library takes advantage of ngx_lua's cosocket API, which ensures
 100% nonblocking behavior.
+
+Quick start
+===========
+
+### install OpenResty
+for ubuntu:
+```shell
+wget -O - https://openresty.org/package/pubkey.gpg | sudo apt-key add -
+echo "deb http://openresty.org/package/ubuntu $(lsb_release -sc) main" \
+    | sudo tee /etc/apt/sources.list.d/openresty.list
+sudo apt-get update
+sudo apt-get -y install openresty
+```
+see https://openresty.org/cn/linux-packages.html for more distributions
+
+### install and start RocketMQ
+```shell
+wget https://archive.apache.org/dist/rocketmq/4.9.2/rocketmq-all-4.9.2-bin-release.zip
+unzip rocketmq-all-4.9.2-bin-release.zip
+cd rocketmq-4.9.2
+nohup bash bin/mqnamesrv &
+nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
+```
+
+### run examples
+```shell
+cd examples
+chmod +x producer.lua
+./producer.lua
+```
 
 Synopsis
 ========
