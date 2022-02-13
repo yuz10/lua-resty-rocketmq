@@ -5,7 +5,6 @@ local trace = require("resty.rocketmq.trace")
 local rebalancer = require("resty.rocketmq.consumer.rebalancer")
 local offsetstore = require("resty.rocketmq.consumer.offsetstore")
 local admin = require("resty.rocketmq.admin")
-local queue = require("resty.rocketmq.queue")
 local bit = require("bit")
 
 local cjson_safe = require("cjson.safe")
@@ -84,8 +83,6 @@ local defaults = {
     allocateMessageQueueStrategy = _M.AllocateMessageQueueAveragely,
     enableMsgTrace = false,
     customizedTraceTopic = core.RMQ_SYS_TRACE_TOPIC,
-    useTLS = false,
-    timeout = 3000,
     messageModel = _M.CLUSTERING,
     consumeFromWhere = _M.CONSUME_FROM_LAST_OFFSET,
     consumeTimestamp = 0,
@@ -131,6 +128,18 @@ for k, default in pairs(defaults) do
     _M[getterFnName] = function(self)
         return self[k]
     end
+end
+
+function _M.addRPCHook(self, hook)
+    self.client:addRPCHook(hook)
+end
+
+function _M.setUseTLS(self, useTLS)
+    self.client:setUseTLS(useTLS)
+end
+
+function _M.setTimeout(self, timeout)
+    self.client:setTimeout(timeout)
 end
 
 function _M:registerMessageListener(messageListener)
@@ -207,10 +216,10 @@ end
 local function setTraceDispatcher(self)
     if self.enableMsgTrace then
         local traceDispatcher = trace.new(self.nameservers, trace.CONSUME, self.customizedTraceTopic)
-        traceDispatcher.producer:setUseTLS(self.useTLS)
-        traceDispatcher.producer:setTimeout(self.timeout)
-        if self.rpcHook then
-            traceDispatcher.producer:addRPCHook(self.rpcHook)
+        traceDispatcher.producer:setUseTLS(self.client.useTLS)
+        traceDispatcher.producer:setTimeout(self.client.timeout)
+        for _, hook in ipairs(self.client.RPCHook) do
+            traceDispatcher.producer:addRPCHook(hook)
         end
         self:registerConsumeMessageHook(traceDispatcher.hook)
         traceDispatcher:start()
@@ -224,16 +233,6 @@ end
 
 local function copySubscription(self)
     self:subscribe(core.RETRY_GROUP_TOPIC_PREFIX .. self.consumerGroup, "*")
-end
-
-local function executePullRequestImmediately(self, pullRequest)
-    queue.push(self.pullRequestQueue, pullRequest)
-end
-
-local function executePullRequestLater(self, pullRequest, timeDelay)
-    ngx_timer_at(timeDelay / 1000, function()
-        executePullRequestImmediately(self, pullRequest)
-    end)
 end
 
 local function buildSysFlag(commitOffset, suspend, subscription, classFilter)
@@ -294,12 +293,12 @@ local function pullMessage(self, messageQueue, processQueue)
     local cachedMessageSizeInMiB = processQueue.msgSize / (1024 * 1024)
     if cachedMessageCount > self.pullThresholdForQueue then
         log(WARN, 'reached msg count limit ', cjson_safe.encode(messageQueue))
-        ngx.sleep(self.PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
+        ngx.sleep(PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
         return
     end
     if cachedMessageSizeInMiB > self.pullThresholdSizeForQueue then
         log(WARN, 'reached msg size limit ', cjson_safe.encode(messageQueue))
-        ngx.sleep(self.PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
+        ngx.sleep(PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
         return
     end
 
