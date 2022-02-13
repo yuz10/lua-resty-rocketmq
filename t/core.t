@@ -56,3 +56,21 @@ extFields.fg:67
 [error]
 
 
+=== TEST 2: getLong
+--- http_config eval: $::HttpConfig
+--- config
+    location /get_long {
+        content_by_lua_block {
+            local core = require "resty.rocketmq.core"
+            local x = string.char(0) .. string.char(0) .. string.char(0) .. string.char(0) .. string.char(0x9e) .. string.char(0x1b) .. string.char(0xbf) .. string.char(0x7b)
+            local a = core.getLong(x, 1)
+            ngx.say(a)
+        }
+    }
+--- request
+GET /get_long
+--- response_body
+2652618619
+--- no_error_log
+[error]
+

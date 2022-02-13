@@ -30,12 +30,15 @@ __DATA__
         content_by_lua_block {
             local utils = require "resty.rocketmq.utils"
             ngx.say(utils.genUniqId())
+
+            ngx.say(utils.java_hash("32q"))
         }
     }
 --- request
 GET /uniq_key
 --- response_body_like
 [0-9A-F]{32}
+50674
 --- no_error_log
 [error]
 
