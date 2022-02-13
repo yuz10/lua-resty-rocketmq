@@ -359,7 +359,7 @@ local function pullMessage(self, messageQueue, processQueue)
         else
             processQueue:putMessage(msgFoundList)
             submitConsumeRequest(self, msgFoundList, processQueue, messageQueue)
-            self.offsetStore:updateOffset(messageQueue, pullResult.maxOffset + 1, true)
+            self.offsetStore:updateOffset(messageQueue, pullResult.maxOffset, true)
             if self.pullInterval > 0 then
                 ngx.sleep(self.pullInterval / 1000)
             end
@@ -375,6 +375,7 @@ local function pullMessage(self, messageQueue, processQueue)
         self.offsetStore:updateOffset(messageQueue, processQueue.nextOffset, false)
         self.offsetStore:persist(messageQueue)
         self.rebalancer:removeProcessQueue(messageQueue)
+        ngx.log(ngx.WARN, 'pullStatus ', pullResult.pullStatus, ',removeProcessQueue ', utils.buildMqKey(messageQueue))
     end
 end
 
@@ -425,11 +426,6 @@ function _M:removeDirtyOffset(mq)
 end
 
 function _M:messageQueueChanged(topic, mqList, allocateResult)
-    local mqKeys = ''
-    for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
-        mqKeys = mqKeys .. mqKey .. ';'
-    end
-    log(WARN, 'messageQueueChanged:', mqKeys)
     for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
         if not self.pullThreads[mqKey] then
             ngx_timer_at(0, function(_, mqKey)
@@ -437,10 +433,14 @@ function _M:messageQueueChanged(topic, mqList, allocateResult)
                 while self.running do
                     local processQueue = self.rebalancer.processQueueTable[mqKey]
                     if not processQueue then
-                        log(WARN, 'nil processQueue ', mqKey)
+                        local mqKeys = ''
+                        for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
+                            mqKeys = mqKeys .. mqKey .. ';'
+                        end
+                        log(WARN, 'nil processQueue ', mqKey, ',avail:', mqKeys)
                         break
                     end
-                    if not processQueue or processQueue.dropped then
+                    if processQueue.dropped then
                         log(WARN, 'dropped ', mqKey)
                         break
                     end
