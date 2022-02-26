@@ -50,14 +50,7 @@ function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
     if core.isSystemTopic(newTopic) then
         return nil, ('topic %s is system topic'):format(newTopic)
     end
-    local h, b, err = self.client:getTopicRouteInfoFromNameserver("TBW102")
-    if not h then
-        return nil, err
-    end
-    if h.code ~= RESPONSE_CODE.SUCCESS then
-        return nil, ('getTopicRouteInfoFromNameserver return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
-    end
-    local topicRouteData, err = decode(b)
+    local topicRouteData, err = self.client:getTopicRouteInfoFromNameserver("TBW102")
     if not topicRouteData then
         return nil, err
     end
