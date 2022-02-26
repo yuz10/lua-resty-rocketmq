@@ -167,7 +167,7 @@ local function sendHeartbeatToAllBroker(self, sock_map)
     end
     local heartbeatData = {
         clientID = '' .. self.clientID,
-        producerDataSet = setmetatable({}, cjson_safe.empty_array_mt),
+        producerDataSet = setmetatable({}, cjson_safe.array_mt),
         consumerDataSet = {
             {
                 groupName = self.consumerGroup,
@@ -189,8 +189,8 @@ local function buildSubscriptionData(topic, subExpression)
     local subscriptionData = {
         topic = topic,
         subString = subExpression,
-        tagsSet = setmetatable({}, cjson_safe.empty_array_mt),
-        codeSet = setmetatable({}, cjson_safe.empty_array_mt),
+        tagsSet = setmetatable({}, cjson_safe.array_mt),
+        codeSet = setmetatable({}, cjson_safe.array_mt),
         subVersion = ngx.now() * 1000,
     }
     for _, tag in ipairs(split(subExpression, '||')) do

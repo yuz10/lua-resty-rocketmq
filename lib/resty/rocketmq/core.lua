@@ -18,6 +18,20 @@ local _M = {}
 _M.serializeTypeCurrentRPC = "ROCKETMQ"  -- "JSON" or "ROCKETMQ"
 local serializeTypeJson = 0
 local serializeTypeRocketmq = 1
+local LanguageCode = {
+    [0] = "JAVA",
+    [1] = "CPP",
+    [2] = "DOTNET",
+    [3] = "PYTHON",
+    [4] = "DELPHI",
+    [5] = "ERLANG",
+    [6] = "RUBY",
+    [7] = "OTHER",
+    [8] = "HTTP",
+    [9] = "GO",
+    [10] = "PHP",
+    [11] = "OMS",
+}
 
 _M.CID_RMQ_SYS_PREFIX = 'CID_RMQ_SYS_'
 _M.RETRY_GROUP_TOPIC_PREFIX = '%RETRY%'
@@ -131,6 +145,7 @@ local REQUEST_CODE = {
     SEND_REPLY_MESSAGE = 324,
     SEND_REPLY_MESSAGE_V2 = 325,
     PUSH_REPLY_MESSAGE_TO_CLIENT = 326,
+    ADD_WRITE_PERM_OF_BROKER = 327,
 }
 _M.REQUEST_CODE = REQUEST_CODE
 
@@ -221,6 +236,7 @@ _M.msgType = {
 }
 
 _M.maxMessageSize = 1024 * 1024 * 4
+_M.ORDER_TOPIC_CONFIG = "ORDER_TOPIC_CONFIG"
 
 function _M.checkTopic(t)
     return #t < 127
@@ -247,17 +263,22 @@ local function short2bin(n)
 end
 
 local requestId = 0
-local function encode(code, h, body, oneway)
+local function encode(code, h, body, oneway, opaque)
     local res = {
         "", -- length: fill later
         char(_M.serializeTypeCurrentRPC == "JSON" and serializeTypeJson or serializeTypeRocketmq),
         "", -- header_length: fill later
     }
 
-    requestId = requestId + 1
     local flag = 0
     if oneway then
         flag = bor(flag, _M.RPC_ONEWAY)
+    end
+    if opaque then
+        flag = bor(flag, _M.RPC_TYPE)
+    else
+        requestId = requestId + 1
+        opaque = requestId
     end
     local header_length
     if _M.serializeTypeCurrentRPC == "JSON" then
@@ -265,7 +286,7 @@ local function encode(code, h, body, oneway)
             code = code,
             language = 'other',
             flag = flag,
-            opaque = requestId,
+            opaque = opaque,
             serializeTypeCurrentRPC = _M.serializeTypeCurrentRPC,
             version = 373, -- version:4.8.0
             extFields = h,
@@ -277,7 +298,7 @@ local function encode(code, h, body, oneway)
         insert(res, short2bin(code))
         insert(res, char(0x07)) -- language: other
         insert(res, short2bin(399)) -- version:4.9.3
-        insert(res, int2bin(requestId))
+        insert(res, int2bin(opaque))
         insert(res, int2bin(flag))
         insert(res, int2bin(0)) -- remark len:0
         insert(res, "") -- extFields len: fill later
@@ -302,7 +323,7 @@ local function encode(code, h, body, oneway)
             .. char(band(rshift(header_length, 8), 0xff))
             .. char(band(header_length, 0xff))
     insert(res, body)
-    return concat(res), requestId
+    return concat(res), opaque
 end
 _M.encode = encode
 
@@ -323,6 +344,7 @@ local function getInt(buffer, offset)
             byte(buffer, offset + 3))
     return res, offset + 4
 end
+_M.getInt = getInt
 
 local function getLong(buffer, offset)
     local long = bor(
@@ -351,9 +373,11 @@ local function decodeHeader(recv)
     else
         local header = {
             code = getShort(recv, 5),
+            language = LanguageCode[byte(recv, 7)],
             version = getShort(recv, 8),
             opaque = getInt(recv, 10),
             flag = getInt(recv, 14),
+            serializeTypeCurrentRPC = "ROCKETMQ",
             extFields = {},
         }
         local remark_len = getInt(recv, 18)
@@ -419,7 +443,7 @@ local function doReqeust(addr, sock, send, requestId, oneway, processor)
 
         header, header_length = decodeHeader(recv)
         body = string.sub(recv, header_length + 5)
-        --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, header.remark or '', body))
+        --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, cjson_safe.encode(header), body))
         if processor and band(header.flag, _M.RPC_TYPE) == 0 then
             processor:processRequest(addr, header, body)
         end

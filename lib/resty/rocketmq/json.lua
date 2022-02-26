@@ -118,6 +118,18 @@ local function decode(s)
     return res
 end
 
+local function encode_any(t, o)
+    if type(o) == 'number' then
+
+    end
+end
+
+local function encode(o)
+    local t = {}
+    encode_any(t, o)
+    return table.concat(t)
+end
+
 return {
     decode = decode
 }

@@ -1,4 +1,5 @@
 local bit = require("bit")
+local cjson_safe = require("cjson.safe")
 local to_hex = require("resty.string").to_hex
 local tohex = bit.tohex
 local band = bit.band
@@ -256,4 +257,11 @@ function _M.java_hash(s)
     return h
 end
 
+function _M.setToArray(s)
+    local a = setmetatable({}, cjson_safe.array_mt)
+    for k, _ in pairs(s) do
+        table.insert(a, k)
+    end
+    return a
+end
 return _M

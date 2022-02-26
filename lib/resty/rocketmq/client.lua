@@ -69,9 +69,31 @@ function _M:chooseNameserver()
     return nameserver
 end
 
+local function compatStandardJson(topicRouteData)
+    local brokerDatas = topicRouteData.brokerDatas
+    for _, bd in ipairs(brokerDatas) do
+        local newBrokerAddrs = {}
+        for k, v in pairs(bd.brokerAddrs) do
+            newBrokerAddrs[tonumber(k)] = v
+        end
+        bd.brokerAddrs = newBrokerAddrs
+    end
+end
+
 function _M:getTopicRouteInfoFromNameserver(topic)
     local addr = self:chooseNameserver()
-    return self:request(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, addr, { topic = topic }, nil, false)
+    local h, b, err = self:request(REQUEST_CODE.GET_ROUTEINFO_BY_TOPIC, addr, { topic = topic }, nil, false)
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('getTopicRouteInfoFromNameserver return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    local topicRouteData, err = decode(b)
+    if not topicRouteData then
+        return nil, err
+    end
+    return compatStandardJson(topicRouteData)
 end
 
 function _M:sendMessage(brokerAddr, msg)
@@ -167,14 +189,7 @@ local function topicRouteData2TopicSubscribeInfo(topic, route)
 end
 
 local function updateTopicRouteInfoFromNameserver(self, topic)
-    local h, b, err = self:getTopicRouteInfoFromNameserver(topic)
-    if err then
-        return nil, err
-    end
-    if h.code ~= RESPONSE_CODE.SUCCESS then
-        return nil, ('getTopicRouteInfoFromNameserver return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
-    end
-    local topicRouteData, err = decode(b)
+    local topicRouteData, err = self:getTopicRouteInfoFromNameserver(topic)
     if not topicRouteData then
         return nil, err
     end
