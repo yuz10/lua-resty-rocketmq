@@ -20,7 +20,7 @@ local function realTest(code, h, body)
     if err then
         print('----err----', err)
     else
-        print(cjson.encode(h), b)
+        print('----ok----', cjson.encode(h), b)
     end
 end
 

@@ -358,7 +358,7 @@ processors[REQUEST_CODE.GET_TOPICS_BY_CLUSTER] = function(self, addr, h, body)
     local cluster = h.extFields.cluster
     local brokerNameSet = self.clusterAddrTable[cluster]
     local topicList = {}
-    for brokerName, _ in pairs(brokerNameSet) do
+    for brokerName, _ in pairs(brokerNameSet or {}) do
         for topic, queueDatas in pairs(self.topicQueueTable) do
             for _, qd in ipairs(queueDatas) do
                 if brokerName == qd.brokerName then
