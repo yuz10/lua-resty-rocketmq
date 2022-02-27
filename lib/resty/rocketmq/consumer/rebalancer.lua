@@ -1,4 +1,3 @@
-local core = require("resty.rocketmq.core")
 local utils = require("resty.rocketmq.utils")
 local cjson_safe = require("cjson.safe")
 local ngx = ngx
