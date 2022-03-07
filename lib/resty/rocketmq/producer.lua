@@ -79,7 +79,7 @@ end
 local function sendHeartbeatToAllBroker(self, sock_map)
     local heartbeatData = {
         clientID = '' .. ngx.worker.pid(),
-        producerDataSet = { { groupName = self.groupName } },
+        producerDataSet = setmetatable({ { groupName = self.groupName } }, cjson_safe.array_mt),
         consumerDataSet = setmetatable({}, cjson_safe.array_mt)
     }
     self.client:sendHeartbeatToAllBroker(sock_map, heartbeatData)

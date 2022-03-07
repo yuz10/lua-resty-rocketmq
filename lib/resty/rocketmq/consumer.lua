@@ -168,7 +168,7 @@ local function sendHeartbeatToAllBroker(self, sock_map)
     local heartbeatData = {
         clientID = '' .. self.clientID,
         producerDataSet = setmetatable({}, cjson_safe.array_mt),
-        consumerDataSet = {
+        consumerDataSet = setmetatable({
             {
                 groupName = self.consumerGroup,
                 consumeType = "CONSUME_PASSIVELY",
@@ -177,7 +177,7 @@ local function sendHeartbeatToAllBroker(self, sock_map)
                 subscriptionDataSet = subscriptionDataSet,
                 unitMode = false,
             }
-        }
+        }, cjson_safe.array_mt)
     }
     self.client:sendHeartbeatToAllBroker(sock_map, heartbeatData)
 end
