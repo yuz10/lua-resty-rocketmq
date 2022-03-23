@@ -257,10 +257,18 @@ function _M.java_hash(s)
     return h
 end
 
-function _M.setToArray(s)
+function _M.keys(s)
     local a = setmetatable({}, cjson_safe.array_mt)
     for k, _ in pairs(s) do
         table.insert(a, k)
+    end
+    return a
+end
+
+function _M.values(m)
+    local a = setmetatable({}, cjson_safe.array_mt)
+    for k, v in pairs(m) do
+        table.insert(a, v)
     end
     return a
 end

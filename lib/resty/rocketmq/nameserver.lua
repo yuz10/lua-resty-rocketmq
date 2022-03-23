@@ -61,25 +61,12 @@ local function createAndUpdateQueueData(self, brokerName, config)
         perm = config.perm,
         topicSysFlag = config.topicSysFlag,
     }
-    local queueDataList = self.topicQueueTable[config.topicName]
-    if not queueDataList then
-        queueDataList = { queueData }
-        self.topicQueueTable[config.topicName] = queueDataList
+    local queueDataMap = self.topicQueueTable[config.topicName]
+    if not queueDataMap then
+        queueDataMap = { [brokerName] = queueData }
+        self.topicQueueTable[config.topicName] = queueDataMap
     else
-        local addNewOne = true
-        for _, qd in ipairs(queueDataList) do
-            if qd.brokerName == brokerName then
-                addNewOne = false
-                qd.brokerName = brokerName
-                qd.writeQueueNums = config.writeQueueNums
-                qd.readQueueNums = config.readQueueNums
-                qd.perm = config.perm
-                qd.topicSysFlag = config.topicSysFlag
-            end
-        end
-        if addNewOne then
-            table.insert(queueDataList, queueData)
-        end
+        queueDataMap[brokerName] = queueData
     end
 
 end
@@ -227,17 +214,10 @@ processors[REQUEST_CODE.UNREGISTER_BROKER] = function(self, addr, h, body)
         if not next(nameSet) then
             self.clusterAddrTable[clusterName] = nil
         end
-        for topic, queueDataList in pairs(self.topicQueueTable) do
-            local newList = {}
-            for _, qd in ipairs(queueDataList) do
-                if qd.brokerName ~= brokerName then
-                    table.insert(newList, qd)
-                end
-            end
-            if #newList == 0 then
+        for topic, queueDataMap in pairs(self.topicQueueTable) do
+            queueDataMap[brokerName] = nil
+            if not next(queueDataMap) then
                 self.topicQueueTable[topic] = nil
-            else
-                self.topicQueueTable[topic] = newList
             end
         end
     end
@@ -253,13 +233,13 @@ local function pickupTopicRouteData(self, topic)
     topicRouteData.brokerDatas = brokerDataList
     local filterServerMap = {}
     topicRouteData.filterServerTable = filterServerMap
-    local queueDataList = self.topicQueueTable[topic]
-    if queueDataList then
-        topicRouteData.queueDatas = queueDataList
+    local queueDataMap = self.topicQueueTable[topic]
+    if queueDataMap then
+        topicRouteData.queueDatas = utils.values(queueDataMap)
         foundQueueData = true
-        for _, qd in ipairs(queueDataList) do
-            table.insert(brokerNameSet, qd.brokerName)
-            local brokerData = self.brokerAddrTable[qd.brokerName];
+        for brokerName, qd in pairs(queueDataMap) do
+            table.insert(brokerNameSet, brokerName)
+            local brokerData = self.brokerAddrTable[brokerName];
             if brokerData then
                 foundBrokerData = true
                 table.insert(brokerDataList, brokerData)
@@ -291,7 +271,7 @@ end
 processors[REQUEST_CODE.GET_BROKER_CLUSTER_INFO] = function(self, addr, h, body)
     local clusterAddrTableTrans = {}
     for k, v in pairs(self.clusterAddrTable) do
-        clusterAddrTableTrans[k] = utils.setToArray(v)
+        clusterAddrTableTrans[k] = utils.keys(v)
     end
     return res(RESPONSE_CODE.SUCCESS, nil, {
         brokerAddrTable = self.brokerAddrTable,
@@ -301,18 +281,17 @@ end
 
 local function operateWritePermOfBroker(self, code, brokerName)
     local topicCnt = 0
-    for _, qdList in pairs(self.topicQueueTable) do
-        for _, qd in ipairs(qdList) do
-            if qd.brokerName == brokerName then
-                local perm = qd.perm
-                if code == REQUEST_CODE.WIPE_WRITE_PERM_OF_BROKER then
-                    perm = band(perm, bnot(core.PERM_WRITE))
-                else
-                    perm = bor(core.PERM_READ, core.PERM_WRITE)
-                end
-                qd.perm = perm
-                topicCnt = topicCnt + 1
+    for _, qdMap in pairs(self.topicQueueTable) do
+        local qd = qdMap[brokerName]
+        if qd then
+            local perm = qd.perm
+            if code == REQUEST_CODE.WIPE_WRITE_PERM_OF_BROKER then
+                perm = band(perm, bnot(core.PERM_WRITE))
+            else
+                perm = bor(core.PERM_READ, core.PERM_WRITE)
             end
+            qd.perm = perm
+            topicCnt = topicCnt + 1
         end
     end
     return topicCnt
@@ -334,7 +313,7 @@ end
 
 processors[REQUEST_CODE.GET_ALL_TOPIC_LIST_FROM_NAMESERVER] = function(self, addr, h, body)
     return res(RESPONSE_CODE.SUCCESS, nil, {
-        topicList = utils.setToArray(self.topicQueueTable),
+        topicList = utils.keys(self.topicQueueTable),
     })
 end
 
@@ -360,14 +339,12 @@ processors[REQUEST_CODE.GET_TOPICS_BY_CLUSTER] = function(self, addr, h, body)
     local topicList = {}
     for brokerName, _ in pairs(brokerNameSet or {}) do
         for topic, queueDatas in pairs(self.topicQueueTable) do
-            for _, qd in ipairs(queueDatas) do
-                if brokerName == qd.brokerName then
-                    topicList[topic] = true
-                end
+            if queueDatas[brokerName] then
+                topicList[topic] = true
             end
         end
     end
-    return res(RESPONSE_CODE.SUCCESS, nil, { topicList = utils.setToArray(topicList) })
+    return res(RESPONSE_CODE.SUCCESS, nil, { topicList = utils.keys(topicList) })
 end
 
 processors[REQUEST_CODE.GET_SYSTEM_TOPIC_LIST_FROM_NS] = function(self, addr, h, body)
@@ -378,7 +355,7 @@ processors[REQUEST_CODE.GET_SYSTEM_TOPIC_LIST_FROM_NS] = function(self, addr, h,
             topicList[brokerName] = true
         end
     end
-    return res(RESPONSE_CODE.SUCCESS, nil, { topicList = utils.setToArray(topicList) })
+    return res(RESPONSE_CODE.SUCCESS, nil, { topicList = utils.keys(topicList) })
 end
 
 function _M:processRequest(addr, h, body)
