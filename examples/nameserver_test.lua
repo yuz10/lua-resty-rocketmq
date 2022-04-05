@@ -26,8 +26,12 @@ end
 
 local n = nameserver.new().processor
 local function mockTest(code, h, body)
-    local res = n:processRequest(nil, { code = code, extFields = h }, body)
-    print(cjson.encode(res))
+    local sock = { send = function(self, data)
+        data = string.sub(data, 5)
+        local res, header_len = core.decodeHeader(data)
+        print(cjson.encode(res), '----', string.sub(data, header_len + 5))
+    end }
+    n:processRequest(sock, nil, { code = code, extFields = h }, body)
 end
 
 realTest(REQUEST_CODE.PUT_KV_CONFIG, { namespace = "", key = "12", value = "123" })

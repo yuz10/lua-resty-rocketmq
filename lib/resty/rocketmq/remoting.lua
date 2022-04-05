@@ -30,13 +30,7 @@ function _M:process()
         local header, header_length = core.decodeHeader(recv)
         local body = string.sub(recv, header_length + 5)
         local addr = var.remote_addr
-        local resp = self.processor:processRequest(addr, header, body)
-        local send = core.encode(resp.code, resp.header, resp.body, false, header.opaque)
-
-        local ok, err = sock:send(send)
-        if not ok then
-            return nil, err
-        end
+        self.processor:processRequest(sock, addr, header, body)
     end
 
 end

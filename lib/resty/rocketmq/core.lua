@@ -445,7 +445,7 @@ local function doReqeust(addr, sock, send, requestId, oneway, processor)
         body = string.sub(recv, header_length + 5)
         --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, cjson_safe.encode(header), body))
         if processor and band(header.flag, _M.RPC_TYPE) == 0 then
-            processor:processRequest(addr, header, body)
+            processor:processRequest(sock, addr, header, body)
         end
         if header.opaque == requestId and band(header.flag, _M.RPC_TYPE) > 0 then
             break

@@ -324,7 +324,7 @@ function _M:batchSend(msgs)
     })
 end
 
-function _M:processRequest(addr, header, body)
+function _M:processRequest(sock, addr, header, body)
     if header.code == REQUEST_CODE.CHECK_TRANSACTION_STATE then
         local msg = core.decodeMsg(body, true, true)
         local localTransactionState = self.transactionListener:checkLocalTransaction(msg)

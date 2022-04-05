@@ -358,12 +358,16 @@ processors[REQUEST_CODE.GET_SYSTEM_TOPIC_LIST_FROM_NS] = function(self, addr, h,
     return res(RESPONSE_CODE.SUCCESS, nil, { topicList = utils.keys(topicList) })
 end
 
-function _M:processRequest(addr, h, body)
+function _M:processRequest(sock, addr, h, body)
     local processor = processors[h.code]
+    local resp
     if processor then
-        return processor(self, addr, h, body)
+        resp = processor(self, addr, h, body)
+    else
+        resp = res(RESPONSE_CODE.REQUEST_CODE_NOT_SUPPORTED, 'request code not supported')
     end
-    return res(RESPONSE_CODE.REQUEST_CODE_NOT_SUPPORTED, 'request code not supported')
+    local send = core.encode(resp.code, resp.header, resp.body, false, h.opaque)
+    sock:send(send)
 end
 
 return _M
