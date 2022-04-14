@@ -135,10 +135,11 @@ function _M.createMessageId(ip, port, offset)
 end
 
 function _M.decodeMessageId(msgId)
-    local ipLength = #msgId == 32 and 4 * 2 or 16 * 2
-    local ip = string2bytes(msgId:sub(1, ipLength))
-    local port = string2bytes(msgId:sub(ipLength + 1, ipLength + 8))
-    local offset = string2bytes(msgId:sub(ipLength + 8 + 1, ipLength + 8 + 16))
+    local ipLength = #msgId == 32 and 4 or 16
+    local msgIdBin = string2bytes(msgId)
+    local ip = msgIdBin:sub(1, ipLength)
+    local port = msgIdBin:sub(ipLength + 1, ipLength + 4)
+    local offset = msgIdBin:sub(ipLength + 4 + 1, ipLength + 4 + 8)
     return toIp(ip) .. ':' .. toNumber(port), toLong(offset)
 end
 
