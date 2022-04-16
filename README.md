@@ -96,7 +96,7 @@ This Lua library takes advantage of ngx_lua's cosocket API, which ensures
 Quick start
 ===========
 
-### install OpenResty
+### Install OpenResty
 for ubuntu:
 ```shell
 wget -O - https://openresty.org/package/pubkey.gpg | sudo apt-key add -
@@ -107,16 +107,16 @@ sudo apt-get -y install openresty
 ```
 see https://openresty.org/cn/linux-packages.html for more distributions
 
-### install and start RocketMQ
+### Install and start RocketMQ
 ```shell
-wget https://archive.apache.org/dist/rocketmq/4.9.2/rocketmq-all-4.9.2-bin-release.zip
-unzip rocketmq-all-4.9.2-bin-release.zip
-cd rocketmq-4.9.2
+wget https://archive.apache.org/dist/rocketmq/4.9.3/rocketmq-all-4.9.3-bin-release.zip
+unzip rocketmq-all-4.9.3-bin-release.zip
+cd rocketmq-4.9.3
 nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
 
-### run examples of this project
+### Run examples of this project
 ```shell
 cd examples
 chmod +x producer.lua
