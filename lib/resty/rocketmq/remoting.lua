@@ -16,14 +16,26 @@ end
 
 function _M:process()
     local sock = ngx.req.socket(true)
+    local running = true
+    if self.processor.processHangingRequest then
+        ngx.thread.spawn(function()
+            while running do
+                self.processor:processHangingRequest(sock)
+                ngx.sleep(0.1)
+            end
+        end)
+    end
+
     while true do
         local recv, err = sock:receive(4)
         if not recv then
+            running = false
             return nil, err
         end
         local length = core.getInt(recv, 1)
         recv, err = sock:receive(length)
         if not recv then
+            running = false
             return nil, err
         end
 
@@ -32,7 +44,6 @@ function _M:process()
         local addr = var.remote_addr
         self.processor:processRequest(sock, addr, header, body)
     end
-
 end
 
 return _M
