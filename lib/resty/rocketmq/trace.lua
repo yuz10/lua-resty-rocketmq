@@ -28,7 +28,7 @@ function _M.new(nameservers, type, customizedTraceTopic)
         queue = q,
         trace_topic = customizedTraceTopic or core.RMQ_SYS_TRACE_TOPIC,
         hook = setmetatable({ queue = q },
-                type == _M.PRODUCE and produceMt or consumeMt)
+            type == _M.PRODUCE and produceMt or consumeMt)
     }, _M)
 end
 
@@ -304,40 +304,34 @@ local function sendTraceDataByMQ(self, keySet, data, topic)
 end
 
 local function sendTrace(self)
-    local ctxList = {}
+    local dataMap = {}
     while true do
-        local res = queue.pop(self.queue)
-        if not res then
+        local ctx = queue.pop(self.queue)
+        if not ctx then
             break
         end
-        table.insert(ctxList, res)
+        local topic = ctx.traceBeans[1].topic
+        dataMap[topic] = dataMap[topic] or {}
+        table.insert(dataMap[topic], encoderFromContextBean(ctx))
     end
-    if #ctxList > 0 then
-        local dataMap = {}
-        for _, ctx in ipairs(ctxList) do
-            local topic = ctx.traceBeans[1].topic
-            dataMap[topic] = dataMap[topic] or {}
-            table.insert(dataMap[topic], encoderFromContextBean(ctx))
-        end
-        for topic, transList in pairs(dataMap) do
-            local buffer = {}
-            local keySet = {}
-            local len = 0
-            for _, trans in ipairs(transList) do
-                for key in pairs(trans.key) do
-                    keySet[key] = true
-                end
-                table.insert(buffer, trans.data)
-                len = len + #trans.data
-                if len >= 11800 then
-                    sendTraceDataByMQ(self, keySet, table.concat(buffer), topic)
-                    keySet = {}
-                    buffer = {}
-                end
+    for topic, transList in pairs(dataMap) do
+        local buffer = {}
+        local keySet = {}
+        local len = 0
+        for _, trans in ipairs(transList) do
+            for key in pairs(trans.key) do
+                keySet[key] = true
             end
-            if #buffer > 0 then
+            table.insert(buffer, trans.data)
+            len = len + #trans.data
+            if len >= 11800 then
                 sendTraceDataByMQ(self, keySet, table.concat(buffer), topic)
+                keySet = {}
+                buffer = {}
             end
+        end
+        if #buffer > 0 then
+            sendTraceDataByMQ(self, keySet, table.concat(buffer), topic)
         end
     end
 end
