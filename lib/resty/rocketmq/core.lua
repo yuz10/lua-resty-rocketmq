@@ -264,12 +264,14 @@ end
 
 local requestId = 0
 local function encode(code, h, body, oneway, opaque)
+    local remark = h.remark or ''
+    h.remark = nil
     local res = {
         "", -- length: fill later
         char(_M.serializeTypeCurrentRPC == "JSON" and serializeTypeJson or serializeTypeRocketmq),
         "", -- header_length: fill later
     }
-
+    
     local flag = 0
     if oneway then
         flag = bor(flag, _M.RPC_ONEWAY)
@@ -290,6 +292,7 @@ local function encode(code, h, body, oneway, opaque)
             serializeTypeCurrentRPC = _M.serializeTypeCurrentRPC,
             version = 373, -- version:4.8.0
             extFields = h,
+            remark = remark,
         }
         header = cjson_safe.encode(header)
         insert(res, header)
@@ -300,7 +303,10 @@ local function encode(code, h, body, oneway, opaque)
         insert(res, short2bin(399)) -- version:4.9.3
         insert(res, int2bin(opaque))
         insert(res, int2bin(flag))
-        insert(res, int2bin(0)) -- remark len:0
+        insert(res, int2bin(#remark))
+        if #remark > 0 then
+            insert(res, remark)
+        end
         insert(res, "") -- extFields len: fill later
         local ext_fields_len_pos = #res
         local ext_fields_len = 0
@@ -313,9 +319,9 @@ local function encode(code, h, body, oneway, opaque)
             ext_fields_len = ext_fields_len + 2 + 4 + #k + #value
         end
         res[ext_fields_len_pos] = int2bin(ext_fields_len)
-        header_length = 2 + 1 + 2 + 4 + 4 + 4 + 4 + ext_fields_len
+        header_length = 2 + 1 + 2 + 4 + 4 + 4 + 4 + #remark + ext_fields_len
     end
-
+    
     body = body or ''
     local length = 4 + header_length + #body
     res[1] = int2bin(length)
@@ -352,7 +358,7 @@ local function getLong(buffer, offset)
             lshift(0ULL + byte(buffer, offset + 1), 48),
             lshift(0ULL + byte(buffer, offset + 2), 40),
             lshift(0ULL + byte(buffer, offset + 3), 32),
-
+            
             lshift(0ULL + byte(buffer, offset + 4), 24),
             lshift(byte(buffer, offset + 5), 16),
             lshift(byte(buffer, offset + 6), 8),
@@ -391,7 +397,7 @@ local function decodeHeader(recv)
             len, offset = getShort(recv, offset)
             local k = string.sub(recv, offset, offset + len - 1)
             offset = offset + len
-
+            
             len, offset = getInt(recv, offset)
             local v = string.sub(recv, offset, offset + len - 1)
             offset = offset + len
@@ -406,7 +412,7 @@ local function newSocket(addr, useTLS, timeout, opt)
     local ip, port = unpack(split(addr, ':'))
     local sock = ngx_socket_tcp()
     sock:settimeout(timeout)
-
+    
     local res, err = sock:connect(ip, port, opt)
     if not res then
         return nil, ('connect %s:%s fail:%s'):format(ip, port, err)
@@ -440,7 +446,7 @@ local function doReqeust(addr, sock, send, requestId, oneway, processor)
         if not recv then
             return nil, nil, err
         end
-
+        
         header, header_length = decodeHeader(recv)
         body = string.sub(recv, header_length + 5)
         --print(('\27[34mrecv:%s\27[0m %s %s'):format((band(header.flag, _M.RPC_TYPE) > 0 and RESPONSE_CODE_NAME or REQUEST_CODE_NAME)[header.code] or header.code, cjson_safe.encode(header), body))
@@ -513,24 +519,24 @@ local function decodeMsg(buffer, offset, readBody, isClient)
     msgExt.commitLogOffset, offset = getLong(buffer, offset)
     msgExt.sysFlag, offset = getInt(buffer, offset)
     msgExt.bornTimeStamp, offset = getLong(buffer, offset)
-
+    
     local bornHostIPLength = band(msgExt.sysFlag, _M.BORNHOST_V6_FLAG) == 0 and 4 or 16;
     local bornHostIP, bornHostPort = string.sub(buffer, offset, offset + bornHostIPLength - 1)
     offset = offset + bornHostIPLength
     bornHostPort, offset = getInt(buffer, offset)
     msgExt.bornHost = utils.toIp(bornHostIP) .. ':' .. bornHostPort
-
+    
     msgExt.storeTimestamp, offset = getLong(buffer, offset)
-
+    
     local storeHostIPLength = band(msgExt.sysFlag, _M.STOREHOSTADDRESS_V6_FLAG) == 0 and 4 or 16;
     local storeHostIp, storeHostPort = string.sub(buffer, offset, offset + storeHostIPLength - 1)
     offset = offset + bornHostIPLength
     storeHostPort, offset = getInt(buffer, offset)
     msgExt.storeHost = utils.toIp(storeHostIp) .. ':' .. storeHostPort
-
+    
     msgExt.reconsumeTimes, offset = getInt(buffer, offset)
     msgExt.preparedTransactionOffset, offset = getLong(buffer, offset)
-
+    
     local bodyLen, topicLen, propertiesLength
     bodyLen, offset = getInt(buffer, offset)
     if bodyLen > 0 and readBody then
@@ -540,12 +546,12 @@ local function decodeMsg(buffer, offset, readBody, isClient)
     topicLen, offset = getByte(buffer, offset)
     msgExt.topic = string.sub(buffer, offset, offset + topicLen - 1)
     offset = offset + topicLen
-
+    
     propertiesLength, offset = getShort(buffer, offset)
     msgExt.properties = utils.string2messageProperties(string.sub(buffer, offset, offset + propertiesLength - 1))
     offset = offset + propertiesLength
     msgExt.msgId = utils.createMessageId(storeHostIp, storeHostPort, msgExt.commitLogOffset)
-
+    
     if isClient then
         msgExt.offsetMsgId = msgExt.msgId
     end
