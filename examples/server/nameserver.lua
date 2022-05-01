@@ -5,7 +5,7 @@ package.path = ';../lib/?.lua;' .. package.path
 local cjson = require("cjson")
 local client = require "resty.rocketmq.client"
 local core = require "resty.rocketmq.core"
-local nameserver = require "resty.rocketmq.nameserver"
+local nameserver = require "resty.rocketmq.server.nameserver"
 local REQUEST_CODE = core.REQUEST_CODE
 
 local nameservers = { "127.0.0.1:9876" }
