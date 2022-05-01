@@ -74,3 +74,23 @@ GET /get_long
 --- no_error_log
 [error]
 
+=== TEST 3: isTopicOrGroupIllegal
+--- http_config eval: $::HttpConfig
+--- config
+    location /topic {
+        content_by_lua_block {
+            local core = require "resty.rocketmq.core"
+            ngx.say(tostring(core.isTopicOrGroupIllegal("123")))
+            ngx.say(tostring(core.isTopicOrGroupIllegal("09azAZ%_-|")))
+            ngx.say(tostring(core.isTopicOrGroupIllegal("^")))
+        }
+    }
+--- request
+GET /topic
+--- response_body
+false
+false
+true
+--- no_error_log
+[error]
+

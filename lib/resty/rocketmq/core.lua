@@ -242,6 +242,34 @@ function _M.checkTopic(t)
     return #t < 127
 end
 
+local VALID_CHAR_BIT_MAP = {
+    [byte('%')] = true,
+    [byte('-')] = true,
+    [byte('_')] = true,
+    [byte('|')] = true,
+}
+for c = byte('0'), byte('9') do
+    VALID_CHAR_BIT_MAP[c] = true
+end
+for c = byte('a'), byte('z') do
+    VALID_CHAR_BIT_MAP[c] = true
+end
+for c = byte('A'), byte('Z') do
+    VALID_CHAR_BIT_MAP[c] = true
+end
+
+function _M.isTopicOrGroupIllegal(t)
+    if #t >= 127 then
+        return true
+    end
+    for i = 1, #t do
+        if not VALID_CHAR_BIT_MAP[byte(t, i)] then
+            return true
+        end
+    end
+    return false
+end
+
 function _M.isSystemTopic(t)
     return SYSTEM_TOPIC_SET[t] or string.find(t, SYSTEM_TOPIC_PREFIX, nil, true) == 1
 end
