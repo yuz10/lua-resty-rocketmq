@@ -15,7 +15,7 @@ jobs:
       matrix:
         rocketmq_version:
           - 4.2.0
-          - 4.9.3
+          - 4.9.4
     runs-on: ubuntu-20.04
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
