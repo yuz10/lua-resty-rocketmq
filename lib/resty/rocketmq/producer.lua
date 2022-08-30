@@ -127,7 +127,7 @@ local function getSendResult(h, msg, mqSelected, err)
         },
         offsetMsgId = h.extFields.msgId,
         msgId = msg.properties.UNIQ_KEY,
-        queueOffset = tonumber(h.extFields.queueOffset),
+        queueOffset = h.extFields.queueOffset,
     }
 end
 
@@ -184,6 +184,7 @@ local function produce(self, msg)
     h.sendResult = sendResult
     return h
 end
+_M.produce = produce
 
 local function genMsg(groupName, topic, message, tags, keys, properties)
     properties = properties or {}

@@ -82,7 +82,7 @@ local sendMessageProcessor = function(self, addr, h, body)
     local resp = res(RESPONSE_CODE.SUCCESS, nil, nil)
     resp.header.msgId = "msgId"
     resp.header.queueId = header.queueId
-    resp.header.queueOffset = 0
+    resp.header.queueOffset = "0"
     resp.header.MSG_REGION = "DefaultRegion"
     resp.header.TRACE_ON = "true"
     return resp
