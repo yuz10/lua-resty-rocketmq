@@ -14,9 +14,9 @@ jobs:
     strategy:
       matrix:
         rocketmq_version:
-          - https://archive.apache.org/dist/rocketmq/4.2.0/rocketmq-all-4.2.0-bin-release.zip
-          - https://archive.apache.org/dist/rocketmq/4.9.4/rocketmq-all-4.9.4-bin-release.zip
-          - https://dist.apache.org/repos/dist/dev/rocketmq/5.0.0-rc1/rocketmq-all-5.0.0-bin-release.zip
+          - 4.2.0
+          - 4.9.4
+          - 5.0.0
     runs-on: ubuntu-20.04
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -31,7 +31,7 @@ jobs:
       - name: download rocketmq
         run: |
           cd ~
-          wget ${{matrix.rocketmq_version}}
+          wget https://archive.apache.org/dist/rocketmq/${{matrix.rocketmq_version}}/rocketmq-all-${{matrix.rocketmq_version}}-bin-release.zip
           unzip rocketmq-all-*-bin-release.zip
 
       - name: run rocketmq
