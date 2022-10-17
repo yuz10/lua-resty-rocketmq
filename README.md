@@ -577,6 +577,35 @@ there is an acl hook provided, usage is:
 
 [Back to TOC](#table-of-contents)
 
+# Proxy quick start
+
+Proxy provides http API of produce/consume messages.
+
+Install and start RocketMQ
+
+```shell
+wget https://archive.apache.org/dist/rocketmq/4.9.3/rocketmq-all-4.9.3-bin-release.zip
+unzip rocketmq-all-4.9.3-bin-release.zip
+cd rocketmq-4.9.3
+nohup bash bin/mqnamesrv &
+nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
+```
+
+Start proxy
+
+```shell
+cd examples/
+openresty -c server/proxy.conf -p .
+```
+
+Send message using proxy
+
+```shell
+curl localhost:8080/topics/topic1/messages -d '{"properties": {"a": "3", "KEYS": "key", "TAGS": "tag"}, "body": "hello proxy"}'
+```
+
+[Back to TOC](#table-of-contents)
+
 Installation
 ============
 
