@@ -20,6 +20,9 @@ function _M.new(consumer)
         topicSubscribeInfoTable = {},
         subscriptionInner = {},
         processQueueTable = {},
+        popProcessQueueTable = {},
+        topicClientRebalance = {},
+        topicBrokerRebalance = {},
     }, _M)
     return rebalancer
 end
@@ -48,12 +51,20 @@ function processQueueMt:removeMessage(msgs)
     end
 end
 
+local popProcessQueueMt = {}
+popProcessQueueMt.__index = popProcessQueueMt
+
+function popProcessQueueMt:incFoundMsg(count)
+    self.waitAckCounter = self.waitAckCounter + count
+end
+
 local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet)
     local changed = false
     for mqKey, pq in pairs(self.processQueueTable) do
         local mq = utils.buildMq(mqKey)
         if mq.topic == topic then
             if not allocateResultSet[mqKey] then
+                pq.dropped = true
                 self.consumer:removeUnnecessaryMessageQueue(mq, pq)
                 changed = true
             end
@@ -113,14 +124,107 @@ local function rebalanceByTopic(self, topic)
     local changed = updateProcessQueueTableInRebalance(self, topic, allocateResultSet)
     if changed then
         log(INFO, ("rebalanced result changed. group=%s, topic=%s, clientId=%s, mqAllSize=%s, cidAllSize=%s, rebalanceResultSize=%s, rebalanceResultSet=%s"):format(
-                self.consumer.consumerGroup, topic, self.clientId, #mqList, #cidAll, #allocateResult, cjson_safe.encode(allocateResult)))
+                self.consumer.consumerGroup, topic, self.clientID, #mqList, #cidAll, #allocateResult, cjson_safe.encode(allocateResult)))
         self.consumer:messageQueueChanged(topic, mqList, allocateResult)
+    end
+end
+
+local function clientRebalance(self, topic)
+    return self.consumer:isClientRebalance()
+    -- todo order and broadcasting not supported
+end
+
+local function tryQueryAssignment(self, topic)
+    if self.topicClientRebalance[topic] then
+        return false
+    end
+    if self.topicBrokerRebalance[topic] then
+        return true
+    end
+    local strategyName = self.consumer.ALLOCATE_MESSAGE_QUEUE_STRATEGY_NAME[self.consumer.allocateMessageQueueStrategy]
+    for retry = 1, 3 do
+        local res, err = self.client:queryAssignment(topic, self.consumer.consumerGroup, strategyName, self.consumer.messageModel, self.clientID)
+        if res then
+            self.topicBrokerRebalance[topic] = true
+            return true
+        end
+        if err ~= 'timeout' then
+            log(WARN, 'query assignment fail:', err)
+            self.topicClientRebalance[topic] = true
+            return false
+        end
+    end
+    self.topicClientRebalance[topic] = true
+    return false
+end
+
+local function updateMessageQueueAssignment(self, topic, assignments)
+    local changed = false
+    local mq2PushAssignment = {}
+    local mq2PopAssignment = {}
+    for _, assignment in ipairs(assignments) do
+        if assignment.messageQueue then
+            local mqKey = utils.buildMqKey(assignment.messageQueue)
+            if assignment.mode == "POP" then
+                mq2PopAssignment[mqKey] = assignment
+            else
+                mq2PushAssignment[mqKey] = assignment
+            end
+        end
+    end
+    -- todo:pop switch to push, subscribe pop retry topic (%RETRY%{group}_{topic}); push switch to pop, unsubscribe pop retry topic
+
+    for mqKey, pq in pairs(self.popProcessQueueTable) do
+        local mq = utils.buildMq(mqKey)
+        if mq.topic == topic then
+            if not mq2PopAssignment[mqKey] then
+                pq.dropped = true
+                self.consumer.removeUnnecessaryMessageQueue(mq, pq)
+                self.popProcessQueueTable[mqKey] = nil
+                changed = true
+            end
+
+        end
+    end
+    for mqKey, _ in pairs(mq2PopAssignment) do
+        if not self.popProcessQueueTable[mqKey] then
+            local now = ngx.now()
+            local pq = setmetatable({
+                lastPopTimestamp = now,
+                waitAckCounter = 0,
+            }, popProcessQueueMt)
+            self.popProcessQueueTable[mqKey] = pq
+            changed = true
+        end
+    end
+    changed = changed or updateProcessQueueTableInRebalance(self, topic, mq2PushAssignment)
+    return changed
+end
+
+local function getRebalanceResultFromBroker(self, topic)
+    local strategyName = self.consumer.ALLOCATE_MESSAGE_QUEUE_STRATEGY_NAME[self.consumer.allocateMessageQueueStrategy]
+    local messageQueueAssignments, err = self.client:queryAssignment(topic, self.consumer.consumerGroup, strategyName, self.consumer.messageModel, self.clientID)
+    if not messageQueueAssignments then
+        log(WARN, ("allocate message queue exception. strategy name: %s, err: %s"):format(strategyName, err))
+        return false
+    end
+    local mqSet = {}
+    for _, messageQueueAssignment in ipairs(messageQueueAssignments) do
+        mqSet[messageQueueAssignment.messageQueue] = true
+    end
+    local changed = updateMessageQueueAssignment(self, topic, messageQueueAssignments)
+    if changed then
+        self.consumer:messageQueueChanged(topic, nil, messageQueueAssignments)
     end
 end
 
 local function doRebalance(self)
     for topic, _ in pairs(self.subscriptionInner) do
-        rebalanceByTopic(self, topic)
+        if not clientRebalance(self, topic) and tryQueryAssignment(self, topic) then
+            getRebalanceResultFromBroker(self, topic)
+        else
+            rebalanceByTopic(self, topic)
+        end
     end
 end
 

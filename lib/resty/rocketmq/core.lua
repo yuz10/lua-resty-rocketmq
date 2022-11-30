@@ -15,7 +15,7 @@ local ngx = ngx
 local ngx_socket_tcp = ngx.socket.tcp
 
 local _M = {}
-_M.serializeTypeCurrentRPC = "ROCKETMQ"  -- "JSON" or "ROCKETMQ"
+_M.serializeTypeCurrentRPC = "JSON"  -- "JSON" or "ROCKETMQ"
 local serializeTypeJson = 0
 local serializeTypeRocketmq = 1
 local LanguageCode = {
@@ -560,8 +560,8 @@ local function request(code, addr, header, body, oneway, RPCHook, useTLS, timeou
             hook:doBeforeRequest(addr, header, body)
         end
     end
-    --print(('\27[33msend %s: %s %s\27[0m %s %s'):format(oneway and 'oneway' or '', addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local send, requestId = encode(code, header, body, oneway)
+    --print(('\27[33msend %s: %s %s\27[0m %s %s'):format(oneway and 'oneway' or requestId, addr, REQUEST_CODE_NAME[code] or code, cjson_safe.encode(header), body))
     local sock, err = newSocket(addr, useTLS, timeout)
     if err then
         return nil, nil, err

@@ -45,11 +45,11 @@ function _M:produce_message(topic)
     local data = ngx.req.get_body_data()
     local data_t, err = cjson_safe.decode(data)
     if err then
-        error(400, "invalid json format")
+        error(400, cjson_safe.encode{error_code='001',error_msg="invalid json format"})
     end
-    local body = data_t.body
+    local body = data_t.body or data_t.messageBody
     if not body then
-        error(400, "no message body")
+        error(400, cjson_safe.encode{error_code='002',error_msg="no message body"})
     end
     local properties = data_t.properties or {}
     properties.UNIQ_KEY = utils.genUniqId()

@@ -56,7 +56,7 @@ function _M:persist(mq)
     local mqKey = utils.buildMqKey(mq)
     local offset = self.offsetTable[mqKey]
     if offset then
-        self.client:updateConsumeOffsetToBroker(mq, offset);
+        self.client:updateConsumeOffsetToBroker(mq, offset)
     end
 end
 

@@ -1,8 +1,9 @@
 local bit = require("bit")
 local cjson_safe = require("cjson.safe")
 local core = require("resty.rocketmq.core")
-local split = require("resty.rocketmq.utils").split
 local decode = require("resty.rocketmq.json").decode
+local utils = require("resty.rocketmq.utils")
+local split = utils.split
 
 local REQUEST_CODE = core.REQUEST_CODE
 local RESPONSE_CODE = core.RESPONSE_CODE
@@ -26,7 +27,7 @@ function _M.new(nameservers, processor)
         RPCHook = {},
         useTLS = false,
         timeout = 3000,
-
+        
         topicPublishInfoTable = {},
         topicSubscribeInfoTable = {},
         topicRouteTable = {},
@@ -199,12 +200,12 @@ local function updateTopicRouteInfoFromNameserver(self, topic)
     end
     local publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData)
     self.topicPublishInfoTable[topic] = publishInfo
-
+    
     local subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData)
     self.topicSubscribeInfoTable[topic] = subscribeInfo
-
+    
     self.topicRouteTable[topic] = topicRouteData
-
+    
     for _, bd in ipairs(topicRouteData.brokerDatas) do
         self.brokerAddrTable[bd.brokerName] = bd.brokerAddrs
     end
@@ -296,7 +297,7 @@ end
 
 function _M:updateConsumeOffsetToBroker(mq, offset)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
-
+    
     return self:request(REQUEST_CODE.UPDATE_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = mq.consumerGroup,
@@ -307,7 +308,7 @@ end
 
 function _M:fetchConsumeOffsetFromBroker(consumerGroup, mq)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
-
+    
     local h, b, err = self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = consumerGroup,
@@ -350,6 +351,9 @@ _M.FOUND = "FOUND"
 _M.NO_NEW_MSG = "NO_NEW_MSG"
 _M.NO_MATCHED_MSG = "NO_MATCHED_MSG"
 _M.OFFSET_ILLEGAL = "OFFSET_ILLEGAL"
+
+_M.POLLING_FULL = "POLLING_FULL"
+_M.POLLING_NOT_FOUND = "POLLING_NOT_FOUND"
 
 function _M:pullKernelImpl(brokerName, header, timeout)
     local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
@@ -402,6 +406,248 @@ function _M:sendMessageBack(brokerName, msg, consumerGroup, delayLevel, maxRecon
         return nil, ('sendMessageBack return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
     end
     return true
+end
+
+function _M:queryAssignment(topic, consumerGroup, strategyName, messageModel, clientId)
+    local brokerAddr = self:findBrokerAddrByTopic(topic)
+    if brokerAddr == nil then
+        updateTopicRouteInfoFromNameserver(self, topic)
+        brokerAddr = self:findBrokerAddrByTopic(topic)
+    end
+    if brokerAddr == nil then
+        return nil
+    end
+    local h, b, err = self:request(REQUEST_CODE.QUERY_ASSIGNMENT, brokerAddr, {}, cjson_safe.encode {
+        topic = topic,
+        consumerGroup = consumerGroup,
+        clientId = clientId,
+        strategyName = strategyName,
+        messageModel = messageModel,
+    })
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('queryAssignment return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    local body, err = cjson_safe.decode(b)
+    if not body then
+        return nil, err
+    end
+    return body.messageQueueAssignments
+end
+
+local function parseStartOffsetInfo(startOffsetInfo)
+    if not startOffsetInfo or startOffsetInfo == '' then
+        return nil
+    end
+    local msgOffsetMap = {}
+    for _, one in ipairs(split(startOffsetInfo, ';')) do
+        local spl = split(one, ' ')
+        if #spl ~= 3 then
+            return nil, 'parse startOffsetInfo error'
+        end
+        local key = spl[1] .. '@' .. spl[2]
+        if msgOffsetMap[key] then
+            return nil, 'parse startOffsetInfo error, duplicate'
+        end
+        msgOffsetMap[key] = tonumber(spl[3])
+    end
+    return msgOffsetMap
+end
+
+local function parseMsgOffsetInfo(str)
+    if not str or str == '' then
+        return nil
+    end
+    local msgOffsetMap = {}
+    for _, one in ipairs(split(str, ';')) do
+        local spl = split(one, ' ')
+        if #spl ~= 3 then
+            return nil, 'parseMsgOffsetInfo error'
+        end
+        local key = spl[1] .. '@' .. spl[2]
+        if msgOffsetMap[key] then
+            return nil, 'parseMsgOffsetInfo error, duplicate'
+        end
+        local offsets = {}
+        for _, offset in ipairs(split(spl[3], ',')) do
+            table.insert(offsets, offset)
+        end
+        msgOffsetMap[key] = offsets
+    end
+    return msgOffsetMap
+end
+
+local function buildExtraInfo(ckQueueOffset, popTime, invisibleTime, reviveQid, topic, brokerName, queueId)
+    return ("%d %d %d %d %s %s %d"):format(ckQueueOffset, popTime, invisibleTime, reviveQid, utils.startsWith(topic, core.RETRY_GROUP_TOPIC_PREFIX) and '1' or '0', brokerName, queueId)
+end
+
+local function getStartOffsetInfoMapKey(topic, key)
+    return (utils.startsWith(topic, core.RETRY_GROUP_TOPIC_PREFIX) and '1' or '0') .. "@" .. key;
+end
+
+local function getQueueOffsetKeyValueKey(queueId, queueOffset)
+    return "qo" .. queueId .. "%" .. queueOffset
+end
+
+local function getQueueOffsetMapKey(topic, queueId, queueOffset)
+    return (utils.startsWith(topic, core.RETRY_GROUP_TOPIC_PREFIX) and '1' or '0') .. "@" .. getQueueOffsetKeyValueKey(queueId, queueOffset)
+end
+
+local function processPopResponse(mq, status, extFields, messages)
+    local startOffsetInfo = parseStartOffsetInfo(extFields.startOffsetInfo)
+    local msgOffsetInfo = parseMsgOffsetInfo(extFields.msgOffsetInfo)
+    local sortMap = {}
+    for _, msg in ipairs(messages) do
+        local key = getStartOffsetInfoMapKey(msg.topic, msg.queueId)
+        sortMap[key] = sortMap[key] or {}
+        table.insert(sortMap[key], msg.queueOffset)
+    end
+    local map = {}
+    for _, msg in ipairs(messages) do
+        if startOffsetInfo == nil then
+            local key = msg.topic .. msg.queueId
+            if not map[key] then
+                map[key] = buildExtraInfo(msg.queueOffset, extFields.popTime, extFields.invisibleTime, extFields.reviveQid, msg.topic, mq.brokerName, msg.queueId)
+            end
+            msg.properties["POP_CK"] = map[key] .. ' ' .. msg.queueOffset
+        else
+            if msg.properties["POP_CK"] == nil then
+                local queueIdKey = getStartOffsetInfoMapKey(msg.topic, msg.queueId)
+                local index = utils.indexOf(sortMap[queueIdKey], msg.queueOffset)
+                local msgQueueOffset = msgOffsetInfo[queueIdKey][index]
+                if msgQueueOffset ~= msg.queueOffset then
+                    log(WARN, ('Queue offset[%s] of msg is strange, not equal to the stored in msg, %s'):format(msgQueueOffset, msg.queueOffset))
+                end
+                local extraInfo = buildExtraInfo(startOffsetInfo[queueIdKey], extFields.popTime, extFields.invisibleTime, extFields.reviveQid, msg.topic, mq.brokerName, msg.queueId)
+                msg.properties["POP_CK"] = extraInfo .. ' ' .. msg.queueOffset
+            end
+        end
+        msg.properties["1ST_POP_TIME"] = msg.properties["1ST_POP_TIME"] or tostring(extFields.popTime)
+        msg.brokerName = mq.brokerName
+    end
+    
+    return {
+        restNum = tonumber(extFields.restNum),
+        invisibleTime = tonumber(extFields.invisibleTime),
+        popTime = tonumber(extFields.popTime),
+        popStatus = status,
+        msgFoundList = messages,
+    }
+end
+
+function _M:pop(mq, invisibleTime, maxNums, consumerGroup, timeout, poll, initMode, expressionType, expression)
+    local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
+    if not brokerAddr then
+        updateTopicRouteInfoFromNameserver(self, mq.topic)
+        brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
+    end
+    local header = {
+        consumerGroup = consumerGroup,
+        topic = mq.topic,
+        queueId = mq.queueId,
+        maxMsgNums = maxNums,
+        invisibleTime = invisibleTime,
+        initMode = initMode,
+        expType = expressionType,
+        exp = expression,
+        order = false,
+        bname = mq.brokerName,
+    }
+    if poll then
+        header.pollTime = timeout
+        timeout = timeout + 10000
+    end
+    local h, b, err = self:request(REQUEST_CODE.POP_MESSAGE, brokerAddr, header, nil, false, timeout)
+    if not h then
+        return nil, err
+    end
+    local status
+    if h.code == RESPONSE_CODE.SUCCESS then
+        status = _M.FOUND
+    elseif h.code == RESPONSE_CODE.NO_NEW_MSG then
+        status = _M.NO_NEW_MSG
+    elseif h.code == RESPONSE_CODE.POLLING_FULL then
+        status = _M.POLLING_FULL
+    elseif h.code == RESPONSE_CODE.POLLING_TIMEOUT then
+        status = _M.POLLING_NOT_FOUND
+    elseif h.code == RESPONSE_CODE.PULL_NOT_FOUND then
+        status = _M.POLLING_NOT_FOUND
+    else
+        return nil, ('pop return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    if status ~= _M.FOUND then
+        return {
+            status = status,
+            restNum = tonumber(h.extFields.restNum),
+        }
+    end
+    local messages = {}
+    core.decodeMsgs(messages, b, true, false)
+    return processPopResponse(mq, status, h.extFields ,messages)
+end
+
+function _M:changePopInvisibleTime(topic, consumerGroup, extraInfo, invisibleTime)
+    local extraInfoStrs = split(extraInfo, ' ')
+    local brokerName = extraInfoStrs[6]
+    local queueId = tonumber(extraInfoStrs[7])
+    local offset = extraInfoStrs[8]
+    local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    if brokerAddr == nil then
+        updateTopicRouteInfoFromNameserver(self, topic)
+        brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    end
+    if brokerAddr == nil then
+        return nil
+    end
+    local h, b, err = self:request(REQUEST_CODE.CHANGE_MESSAGE_INVISIBLETIME, brokerAddr, {
+        topic = topic,
+        queueId = queueId,
+        offset = offset,
+        consumerGroup = consumerGroup,
+        extraInfo = extraInfo,
+        invisibleTime = invisibleTime,
+        bname = brokerName,
+    })
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('changePopInvisibleTime return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    return h.extFields
+end
+
+function _M:ack(message, consumerGroup)
+    local extraInfo = message.properties['POP_CK']
+    local extraInfoStrs = split(extraInfo, ' ')
+    local brokerName = extraInfoStrs[6]
+    local queueId = tonumber(extraInfoStrs[7])
+    local offset = extraInfoStrs[8]
+    local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    if brokerAddr == nil then
+        updateTopicRouteInfoFromNameserver(self, topic)
+        brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    end
+    if brokerAddr == nil then
+        return nil
+    end
+    local h, b, err = self:request(REQUEST_CODE.ACK_MESSAGE, brokerAddr, {
+        topic = message.topic,
+        queueId = queueId,
+        offset = offset,
+        consumerGroup = consumerGroup,
+        extraInfo = extraInfo,
+        bname = brokerName,
+    })
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('ack return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    return h.extFields
 end
 
 return _M

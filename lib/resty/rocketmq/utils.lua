@@ -273,4 +273,14 @@ function _M.values(m)
     end
     return a
 end
+
+function _M.indexOf(t, x)
+    for i, v in ipairs(t) do
+        if x == v then
+            return i
+        end
+    end
+    return -1
+end
+
 return _M

@@ -31,6 +31,9 @@ _M.CONSUME_FROM_TIMESTAMP = 'CONSUME_FROM_TIMESTAMP'
 _M.CONSUME_SUCCESS = 'CONSUME_SUCCESS'
 _M.RECONSUME_LATER = 'RECONSUME_LATER'
 
+local INIT_MODE_MIN = 0
+local INIT_MODE_MAX = 1
+
 _M.AllocateMessageQueueAveragely = function(consumerGroup, currentCID, mqAll, cidAll)
     if not currentCID or currentCID == '' then
         return nil, 'currentCID is empty'
@@ -75,9 +78,16 @@ _M.AllocateMessageQueueAveragely = function(consumerGroup, currentCID, mqAll, ci
     return res
 end
 
+_M.ALLOCATE_MESSAGE_QUEUE_STRATEGY_NAME = {
+    [_M.AllocateMessageQueueAveragely] = "AVG"
+}
+
 local PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL = 50
 local BROKER_SUSPEND_MAX_TIME_MILLIS = 1000 * 15
 local CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND = 1000 * 30
+local MAX_POP_INVISIBLE_TIME = 300000
+local MIN_POP_INVISIBLE_TIME = 5000
+local popDelayLevel = { 10, 30, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 1200, 1800, 3600, 7200 }
 
 local defaults = {
     allocateMessageQueueStrategy = _M.AllocateMessageQueueAveragely,
@@ -93,6 +103,10 @@ local defaults = {
     pullInterval = 0,
     consumeMessageBatchMaxSize = 1,
     maxReconsumeTimes = 16,
+    clientRebalance = true,
+    popThresholdForQueue = 96,
+    popInvisibleTime = 60000,
+    popBatchNums = 32,
 }
 
 function _M.new(nameservers, consumerGroup)
@@ -107,6 +121,7 @@ function _M.new(nameservers, consumerGroup)
         clientID = '127.0.0.1@' .. ngx.worker.pid() .. '#' .. (ngx.now() * 1000),
         consumeMessageHookList = {},
         pullThreads = {},
+        popThreads = {},
     }, _M)
     for k, default in pairs(defaults) do
         consumer[k] = default
@@ -118,9 +133,10 @@ function _M.new(nameservers, consumerGroup)
     return consumer
 end
 
-for k, _ in pairs(defaults) do
+for k, v in pairs(defaults) do
+    local getMove = type(v) == 'boolean' and "is" or "get"
     local setterFnName = 'set' .. k:sub(1, 1):upper() .. k:sub(2)
-    local getterFnName = 'get' .. k:sub(1, 1):upper() .. k:sub(2)
+    local getterFnName = getMove .. k:sub(1, 1):upper() .. k:sub(2)
     _M[setterFnName] = function(self, value)
         if self.running then
             return nil, 'cant set property after start'
@@ -255,6 +271,124 @@ local function buildSysFlag(commitOffset, suspend, subscription, classFilter)
     return flag
 end
 
+local function isPopTimeout(extraInfo)
+    local extraInfoStrs = split(extraInfo, ' ')
+    local popTime = tonumber(extraInfoStrs[2])
+    local invisibleTime = tonumber(extraInfoStrs[3])
+    if ngx.now() * 1000 - popTime >= invisibleTime then
+        return true
+    end
+    return false
+end
+
+local function changePopInvisibleTime(self, msg, consumerGroup, delayLevel)
+    if delayLevel == 0 then
+        delayLevel = msg.reconsumeTimes
+    end
+    local delaySecond = delayLevel > #popDelayLevel and popDelayLevel[#popDelayLevel] or popDelayLevel[delayLevel]
+    local extraInfo = msg.properties['POP_CK']
+    self.client:changePopInvisibleTime(msg.topic, consumerGroup, extraInfo, delaySecond * 1000)
+end
+
+local function checkNeedAckOrDelay(self, msg)
+    local msgDelaytime = ngx.now() * 1000 - msg.bornTimestamp
+    if msgDelaytime > popDelayLevel[#popDelayLevel] * 2 * 1000 then
+        self.client:ack(msg, self.consumerGroup)
+    else
+        local delayLevel = 0
+        for i = #popDelayLevel, 1, -1 do
+            if msgDelaytime >= popDelayLevel[i] * 1000 then
+                delayLevel = i + 1
+                break
+            end
+        end
+        changePopInvisibleTime(self, msg, self.consumerGroup, delayLevel)
+        log(WARN, ('Consume too many times, but delay time %s not enough. changePopInvisibleTime to delayLevel: %s'):format(msgDelaytime, delayLevel))
+    end
+end
+
+local function submitPopConsumeRequest(self, msgFoundList, processQueue, messageQueue)
+    if processQueue.dropped then
+        return
+    end
+    local messageListener = self.messageListener
+    local consumeMessageBatchMaxSize = self.consumeMessageBatchMaxSize
+    local context = {
+        ackIndex = 0x7fffffff,
+        messageQueue = messageQueue,
+        delayLevelWhenNextConsume = 0,
+    }
+    local i = 1
+    while i <= #msgFoundList do
+        local msgs = {}
+        for j = 1, consumeMessageBatchMaxSize do
+            if i <= #msgFoundList then
+                table.insert(msgs, msgFoundList[i])
+                i = i + 1
+            else
+                break
+            end
+        end
+        local extraInfo = msgs[1].properties["POP_CK"]
+        if isPopTimeout(extraInfo) then
+            log(WARN, 'the pop message time out so abort consume')
+            processQueue:incFoundMsg(-#msgs)
+            return
+        end
+        
+        local consumeMessageContext
+        if #self.consumeMessageHookList > 0 then
+            consumeMessageContext = {
+                consumerGroup = self.consumerGroup,
+                mq = messageQueue,
+                msgList = msgs,
+                success = false,
+            }
+            for _, hook in ipairs(self.consumeMessageHookList) do
+                hook:consumeMessageBefore(consumeMessageContext)
+            end
+        end
+        local now = tostring(ngx.now() * 1000)
+        for _, msg in ipairs(msgs) do
+            msg.properties["CONSUME_START_TIME"] = now
+        end
+        local status = messageListener:consumeMessage(msgs, context)
+        status = status or _M.RECONSUME_LATER
+        if #self.consumeMessageHookList > 0 then
+            consumeMessageContext.status = status
+            consumeMessageContext.success = status == _M.CONSUME_SUCCESS
+            consumeMessageContext.consumeContextType = status == _M.CONSUME_SUCCESS and 'SUCCESS' or 'FAILED'
+            for _, hook in ipairs(self.consumeMessageHookList) do
+                hook:consumeMessageAfter(consumeMessageContext)
+            end
+        end
+        if processQueue.dropped or isPopTimeout(extraInfo) then
+            log(WARN, 'the pop message time out so abort consume')
+            processQueue:incFoundMsg(-#msgs)
+            return
+        end
+        local ackIndex = context.ackIndex
+        if status == _M.CONSUME_SUCCESS then
+            if ackIndex > #msgs then
+                ackIndex = #msgs
+            end
+        else
+            ackIndex = 0
+        end
+        for i = ackIndex + 1, #msgs do
+            local msg = msgs[i]
+            processQueue:ack()
+            if msg.reconsumeTimes >= self.maxReconsumeTimes then
+                checkNeedAckOrDelay(msg)
+            else
+                local delayLevel = context.delayLevelWhenNextConsume
+                changePopInvisibleTime(msg, self.consumerGroup, delayLevel);
+            end
+        end
+    
+    end
+end
+
 local function submitConsumeRequest(self, msgFoundList, processQueue, messageQueue)
     if processQueue.dropped then
         return
@@ -324,7 +458,7 @@ local function pullMessage(self, messageQueue, processQueue)
         ngx.sleep(PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
         return
     end
-
+    
     local sd = self.rebalancer.subscriptionInner[messageQueue.topic]
     if not sd then
         log(WARN, "no subscription for ", cjson_safe.encode(messageQueue))
@@ -378,6 +512,52 @@ local function pullMessage(self, messageQueue, processQueue)
     end
 end
 
+local function popMessage(self, messageQueue, processQueue)
+    processQueue.lastPopTimestamp = ngx.now() * 1000
+    if processQueue.waitAckCounter > self.popThresholdForQueue then
+        log(WARN, 'the messages waiting to ack exceeds the threshold, so do flow control')
+        ngx.sleep(PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL / 1000)
+        return
+    end
+    local sd = self.rebalancer.subscriptionInner[messageQueue.topic]
+    if not sd then
+        log(WARN, "no subscription for ", cjson_safe.encode(messageQueue))
+        ngx.sleep(self.pullTimeDelayMillsWhenException / 1000)
+        return
+    end
+    
+    local invisibleTime = self.popInvisibleTime
+    if invisibleTime < MIN_POP_INVISIBLE_TIME or invisibleTime > MAX_POP_INVISIBLE_TIME then
+        invisibleTime = 60000
+    end
+    
+    local initMode = self.consumeFromWhere == _M.CONSUME_FROM_FIRST_OFFSET and INIT_MODE_MIN or INIT_MODE_MAX
+    local popResult, err = self.client:pop(messageQueue, invisibleTime, self.popBatchNums, self.consumerGroup,
+            BROKER_SUSPEND_MAX_TIME_MILLIS, true, initMode, sd.expressionType, sd.expression)
+    if err then
+        ngx.sleep(self.pullTimeDelayMillsWhenException / 1000)
+        return
+    end
+    if popResult.popStatus == client.FOUND then
+        local msgFoundList = popResult.msgFoundList
+        if not msgFoundList or #msgFoundList == 0 then
+            return
+        else
+            processQueue:incFoundMsg(#msgFoundList)
+            submitPopConsumeRequest(self, msgFoundList, processQueue, messageQueue)
+            if self.pullInterval > 0 then
+                ngx.sleep(self.pullInterval / 1000)
+            end
+            return
+        end
+    elseif popResult.popStatus == client.NO_NEW_MSG or popResult.popStatus == client.POLLING_NOT_FOUND then
+        return
+    else
+        ngx.sleep(self.pullTimeDelayMillsWhenException / 1000)
+        return
+    end
+end
+
 function _M:start()
     local self = self
     if not self.messageListener then
@@ -399,7 +579,7 @@ function _M:start()
     ngx.timer.every(5, function()
         for mqKey, _ in pairs(self.rebalancer.processQueueTable) do
             local mq = utils.buildMq(mqKey)
-            self.offsetStore:persist(mq);
+            self.offsetStore:persist(mq)
         end
     end)
     if self.traceDispatcher then
@@ -416,8 +596,8 @@ function _M:stop()
 end
 
 function _M:removeUnnecessaryMessageQueue(mq, pq)
-    self.offsetStore:persist(mq);
-    self.offsetStore:removeOffset(mq);
+    self.offsetStore:persist(mq)
+    self.offsetStore:removeOffset(mq)
 end
 
 function _M:removeDirtyOffset(mq)
@@ -448,6 +628,32 @@ function _M:messageQueueChanged(topic, mqList, allocateResult)
                 self.pullThreads[mqKey] = nil
             end, mqKey)
             self.pullThreads[mqKey] = true
+        end
+    end
+    
+    for mqKey, _ in pairs(self.rebalancer.popProcessQueueTable) do
+        if not self.popThreads[mqKey] then
+            ngx_timer_at(0, function(_, mqKey)
+                local messageQueue = utils.buildMq(mqKey)
+                while self.running do
+                    local processQueue = self.rebalancer.popProcessQueueTable[mqKey]
+                    if not processQueue then
+                        local mqKeys = ''
+                        for mqKey, _ in pairs(self.rebalancer.popProcessQueueTable) do
+                            mqKeys = mqKeys .. mqKey .. ';'
+                        end
+                        log(WARN, 'nil popProcessQueueTable ', mqKey, ',avail:', mqKeys)
+                        break
+                    end
+                    if processQueue.dropped then
+                        log(WARN, 'dropped ', mqKey)
+                        break
+                    end
+                    popMessage(self, messageQueue, processQueue)
+                end
+                self.popThreads[mqKey] = nil
+            end, mqKey)
+            self.popThreads[mqKey] = true
         end
     end
 end
