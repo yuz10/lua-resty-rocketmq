@@ -283,8 +283,9 @@ end
 
 local function changePopInvisibleTime(self, msg, consumerGroup, delayLevel)
     if delayLevel == 0 then
-        delayLevel = msg.reconsumeTimes
+        delayLevel = msg.reconsumeTimes or 0
     end
+    delayLevel = delayLevel + 1
     local delaySecond = delayLevel > #popDelayLevel and popDelayLevel[#popDelayLevel] or popDelayLevel[delayLevel]
     local extraInfo = msg.properties['POP_CK']
     self.client:changePopInvisibleTime(msg.topic, consumerGroup, extraInfo, delaySecond * 1000)
@@ -375,6 +376,10 @@ local function submitPopConsumeRequest(self, msgFoundList, processQueue, message
         else
             ackIndex = 0
         end
+        for i = 1, ackIndex do
+            self.client:ack(msgs[i], self.consumerGroup)
+            processQueue:ack()
+        end
         for i = ackIndex + 1, #msgs do
             local msg = msgs[i]
             processQueue:ack()
@@ -382,7 +387,7 @@ local function submitPopConsumeRequest(self, msgFoundList, processQueue, message
                 checkNeedAckOrDelay(msg)
             else
                 local delayLevel = context.delayLevelWhenNextConsume
-                changePopInvisibleTime(msg, self.consumerGroup, delayLevel);
+                changePopInvisibleTime(self, msg, self.consumerGroup, delayLevel);
             end
         end
     

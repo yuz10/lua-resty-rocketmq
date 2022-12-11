@@ -58,6 +58,10 @@ function popProcessQueueMt:incFoundMsg(count)
     self.waitAckCounter = self.waitAckCounter + count
 end
 
+function popProcessQueueMt:ack()
+    self.waitAckCounter = self.waitAckCounter - 1
+end
+
 local function updateProcessQueueTableInRebalance(self, topic, allocateResultSet)
     local changed = false
     for mqKey, pq in pairs(self.processQueueTable) do
