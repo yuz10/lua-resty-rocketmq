@@ -46,7 +46,7 @@ __DATA__
 GET /core
 --- response_body_like
 code:1234
-version:399
+version:373
 opaque:\d+
 flag:0
 remark:
