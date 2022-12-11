@@ -41,7 +41,7 @@ Table of Contents
             * [setAllocateMessageQueueStrategy](#setAllocateMessageQueueStrategy)
             * [getAllocateMessageQueueStrategy](#getAllocateMessageQueueStrategy)
             * [setEnableMsgTrace](#setEnableMsgTrace)
-            * [getEnableMsgTrace](#getEnableMsgTrace)
+            * [isEnableMsgTrace](#isEnableMsgTrace)
             * [setCustomizedTraceTopic](#setCustomizedTraceTopic)
             * [getCustomizedTraceTopic](#getCustomizedTraceTopic)
             * [setConsumeFromWhere](#setConsumeFromWhere)
@@ -401,8 +401,8 @@ default value is `consumer.AllocateMessageQueueAveragely`
 #### setEnableMsgTrace
 `syntax: c:setEnableMsgTrace(enableMsgTrace)`
 
-#### getEnableMsgTrace
-`syntax: local enableMsgTrace = c:getEnableMsgTrace()`
+#### isEnableMsgTrace
+`syntax: local enableMsgTrace = c:isEnableMsgTrace()`
 
 #### setCustomizedTraceTopic
 `syntax: c:setCustomizedTraceTopic(customizedTraceTopic)`
@@ -463,6 +463,30 @@ default value is `consumer.AllocateMessageQueueAveragely`
 
 #### getMaxReconsumeTimes
 `syntax: local maxReconsumeTimes = c:getMaxReconsumeTimes()`
+
+#### setClientRebalance
+`syntax: c:setClientRebalance(clientRebalance)`
+
+#### isClientRebalance
+`syntax: local clientRebalance = c:isClientRebalance()`
+
+#### setPopThresholdForQueue
+`syntax: c:setPopThresholdForQueue(popThresholdForQueue)`
+
+#### getPopThresholdForQueue
+`syntax: local popThresholdForQueue = c:getPopThresholdForQueue()`
+
+#### setPopInvisibleTime
+`syntax: c:setPopInvisibleTime(popInvisibleTime)`
+
+#### getPopInvisibleTime
+`syntax: local popInvisibleTime = c:getPopInvisibleTime()`
+
+#### setPopBatchNums
+`syntax: c:setPopBatchNums(popBatchNums)`
+
+#### getPopBatchNums
+`syntax: local popBatchNums = c:getPopBatchNums()`
 
 [Back to TOC](#table-of-contents)
 

@@ -49,7 +49,7 @@ code:1234
 version:399
 opaque:\d+
 flag:0
-remark:nil
+remark:
 extFields.abcde:12345
 extFields.fg:67
 --- no_error_log
