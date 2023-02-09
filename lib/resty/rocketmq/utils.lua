@@ -254,6 +254,7 @@ function _M.java_hash(s)
     local h = 0
     for i = 1, #s do
         h = 31 * h + byte(s, i);
+        h = band(2^32-1, h)
     end
     return h
 end
