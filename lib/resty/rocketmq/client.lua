@@ -16,6 +16,10 @@ local random = math.random
 ---@class client
 local _M = {}
 _M.__index = _M
+
+_M.INIT_MODE_MIN = 0
+_M.INIT_MODE_MAX = 1
+
 function _M.new(nameservers, processor)
     if #nameservers == 0 then
         return nil, 'no nameserver'
@@ -27,7 +31,7 @@ function _M.new(nameservers, processor)
         RPCHook = {},
         useTLS = false,
         timeout = 3000,
-        
+
         topicPublishInfoTable = {},
         topicSubscribeInfoTable = {},
         topicRouteTable = {},
@@ -200,12 +204,12 @@ local function updateTopicRouteInfoFromNameserver(self, topic)
     end
     local publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData)
     self.topicPublishInfoTable[topic] = publishInfo
-    
+
     local subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData)
     self.topicSubscribeInfoTable[topic] = subscribeInfo
-    
+
     self.topicRouteTable[topic] = topicRouteData
-    
+
     for _, bd in ipairs(topicRouteData.brokerDatas) do
         self.brokerAddrTable[bd.brokerName] = bd.brokerAddrs
     end
@@ -297,7 +301,7 @@ end
 
 function _M:updateConsumeOffsetToBroker(mq, offset)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
-    
+
     return self:request(REQUEST_CODE.UPDATE_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = mq.consumerGroup,
@@ -308,7 +312,7 @@ end
 
 function _M:fetchConsumeOffsetFromBroker(consumerGroup, mq)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
-    
+
     local h, b, err = self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = consumerGroup,
@@ -527,7 +531,7 @@ local function processPopResponse(mq, status, extFields, messages)
         msg.properties["1ST_POP_TIME"] = msg.properties["1ST_POP_TIME"] or tostring(extFields.popTime)
         msg.brokerName = mq.brokerName
     end
-    
+
     return {
         restNum = tonumber(extFields.restNum),
         invisibleTime = tonumber(extFields.invisibleTime),
@@ -540,8 +544,14 @@ end
 function _M:pop(mq, invisibleTime, maxNums, consumerGroup, timeout, poll, initMode, expressionType, expression)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
     if not brokerAddr then
-        updateTopicRouteInfoFromNameserver(self, mq.topic)
+        local res, err = updateTopicRouteInfoFromNameserver(self, mq.topic)
+        if not res then
+            return nil, err
+        end
         brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
+    end
+    if brokerAddr == nil then
+        return nil, 'broker address not found for broker ' .. mq.brokerName
     end
     local header = {
         consumerGroup = consumerGroup,
@@ -585,7 +595,7 @@ function _M:pop(mq, invisibleTime, maxNums, consumerGroup, timeout, poll, initMo
     end
     local messages = {}
     core.decodeMsgs(messages, b, true, false)
-    return processPopResponse(mq, status, h.extFields ,messages)
+    return processPopResponse(mq, status, h.extFields, messages)
 end
 
 function _M:changePopInvisibleTime(topic, consumerGroup, extraInfo, invisibleTime)
@@ -620,7 +630,10 @@ function _M:changePopInvisibleTime(topic, consumerGroup, extraInfo, invisibleTim
 end
 
 function _M:ack(message, consumerGroup)
-    local extraInfo = message.properties['POP_CK']
+    return self:doAck(message.topic, consumerGroup, message.properties['POP_CK'])
+end
+
+function _M:doAck(topic, consumerGroup, extraInfo)
     local extraInfoStrs = split(extraInfo, ' ')
     local brokerName = extraInfoStrs[6]
     local queueId = tonumber(extraInfoStrs[7])
@@ -634,7 +647,7 @@ function _M:ack(message, consumerGroup)
         return nil
     end
     local h, b, err = self:request(REQUEST_CODE.ACK_MESSAGE, brokerAddr, {
-        topic = message.topic,
+        topic = topic,
         queueId = queueId,
         offset = offset,
         consumerGroup = consumerGroup,

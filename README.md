@@ -77,6 +77,8 @@ Table of Contents
           * [viewMessage](#viewMessage)
           * [queryMessage](#queryMessage)
           * [queryTraceByMsgId](#queryTraceByMsgId)
+    * [HTTP proxy](#HTTP-proxy)
+      * [Quick start](#quick-start-1)
 * [Installation](#installation)
 * [See Also](#see-also)
 
@@ -601,16 +603,19 @@ there is an acl hook provided, usage is:
 
 [Back to TOC](#table-of-contents)
 
-# Proxy quick start
+HTTP proxy
+----------------------
 
-Proxy provides http API of produce/consume messages.
+### quick start
+
+HTTP proxy provides http API of produce/consume messages. RocketMQ >= 5.0.0 is required
 
 Install and start RocketMQ
 
 ```shell
-wget https://archive.apache.org/dist/rocketmq/4.9.3/rocketmq-all-4.9.3-bin-release.zip
-unzip rocketmq-all-4.9.3-bin-release.zip
-cd rocketmq-4.9.3
+wget https://archive.apache.org/dist/rocketmq/5.0.0/rocketmq-all-5.0.0-bin-release.zip
+unzip rocketmq-all-5.0.0-bin-release.zip
+cd rocketmq-5.0.0
 nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
@@ -619,13 +624,21 @@ Start proxy
 
 ```shell
 cd examples/
-openresty -c server/proxy.conf -p .
+openresty -c server/http_proxy.conf -p .
 ```
 
-Send message using proxy
+Send message using http proxy
 
 ```shell
 curl localhost:8080/topics/topic1/messages -d '{"properties": {"a": "3", "KEYS": "key", "TAGS": "tag"}, "body": "hello proxy"}'
+```
+
+Consume message using http proxy
+
+```shell
+curl 'localhost:8080/topics/topic1/messages?consumer=group1&numOfMessages=16&waitseconds=10'
+
+curl localhost:8080/topics/topic1/messages/ack?consumer=group1 -XPUT -d '{"receiptHandles":["32312031363736303232303830303335203630303030203020302062726F6B65722D302030203331"]}'
 ```
 
 [Back to TOC](#table-of-contents)

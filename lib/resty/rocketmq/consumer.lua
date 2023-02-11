@@ -31,9 +31,6 @@ _M.CONSUME_FROM_TIMESTAMP = 'CONSUME_FROM_TIMESTAMP'
 _M.CONSUME_SUCCESS = 'CONSUME_SUCCESS'
 _M.RECONSUME_LATER = 'RECONSUME_LATER'
 
-local INIT_MODE_MIN = 0
-local INIT_MODE_MAX = 1
-
 _M.AllocateMessageQueueAveragely = function(consumerGroup, currentCID, mqAll, cidAll)
     if not currentCID or currentCID == '' then
         return nil, 'currentCID is empty'
@@ -536,7 +533,7 @@ local function popMessage(self, messageQueue, processQueue)
         invisibleTime = 60000
     end
     
-    local initMode = self.consumeFromWhere == _M.CONSUME_FROM_FIRST_OFFSET and INIT_MODE_MIN or INIT_MODE_MAX
+    local initMode = self.consumeFromWhere == _M.CONSUME_FROM_FIRST_OFFSET and client.INIT_MODE_MIN or client.INIT_MODE_MAX
     local popResult, err = self.client:pop(messageQueue, invisibleTime, self.popBatchNums, self.consumerGroup,
             BROKER_SUSPEND_MAX_TIME_MILLIS, true, initMode, sd.expressionType, sd.expression)
     if err then

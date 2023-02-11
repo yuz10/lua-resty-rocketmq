@@ -70,17 +70,19 @@ do
     end
 end
 
-local function string2bytes(s)
+local function fromHex(s)
     local res = {}
     for i = 1, #s / 2 do
         table.insert(res, char(h2b[byte(s, 2 * i - 1)] * 16 + h2b[byte(s, 2 * i)]))
     end
     return table.concat(res)
 end
+_M.fromHex = fromHex
 
-local function bytes2string(s)
+local function toHex(s)
     return upper(to_hex(s))
 end
+_M.toHex = toHex
 
 local function toNumber(a)
     local res = 0
@@ -131,12 +133,12 @@ function _M.createMessageId(ip, port, offset)
         offset = rshift(offset, 8)
     end
 
-    return bytes2string(ip .. table.concat(portInt) .. table.concat(offsetLong))
+    return toHex(ip .. table.concat(portInt) .. table.concat(offsetLong))
 end
 
 function _M.decodeMessageId(msgId)
     local ipLength = #msgId == 32 and 4 or 16
-    local msgIdBin = string2bytes(msgId)
+    local msgIdBin = fromHex(msgId)
     local ip = msgIdBin:sub(1, ipLength)
     local port = msgIdBin:sub(ipLength + 1, ipLength + 4)
     local offset = msgIdBin:sub(ipLength + 4 + 1, ipLength + 4 + 8)
@@ -229,7 +231,7 @@ do
                 char(band(time, 0xff))
         counter = counter + 1
         local counterBin = char(band(rshift(counter, 8), 0xff)) .. char(band(counter, 0xff))
-        return bytes2string(ip .. pidBin .. clientIdHash .. timeBin .. counterBin)
+        return toHex(ip .. pidBin .. clientIdHash .. timeBin .. counterBin)
     end
 end
 
