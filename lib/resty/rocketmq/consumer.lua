@@ -251,23 +251,6 @@ local function copySubscription(self)
     self:subscribe(core.RETRY_GROUP_TOPIC_PREFIX .. self.consumerGroup, "*")
 end
 
-local function buildSysFlag(commitOffset, suspend, subscription, classFilter)
-    local flag = 0
-    if commitOffset then
-        flag = bor(flag, 1)
-    end
-    if suspend then
-        flag = bor(flag, 2)
-    end
-    if subscription then
-        flag = bor(flag, 4)
-    end
-    if classFilter then
-        flag = bor(flag, 8)
-    end
-    return flag
-end
-
 local function isPopTimeout(extraInfo)
     local extraInfoStrs = split(extraInfo, ' ')
     local popTime = tonumber(extraInfoStrs[2])
@@ -468,7 +451,7 @@ local function pullMessage(self, messageQueue, processQueue)
         return
     end
     local commitOffsetValue = self.offsetStore:readOffset(messageQueue, offsetstore.READ_FROM_MEMORY)
-    local sysFlag = buildSysFlag(commitOffsetValue > 0, true, sd.subExpression, false)
+    local sysFlag = utils.buildSysFlag(commitOffsetValue > 0, true, sd.subExpression, false)
     local pullResult, err = self.client:pullKernelImpl(messageQueue.brokerName, {
         consumerGroup = self.consumerGroup,
         topic = messageQueue.topic,

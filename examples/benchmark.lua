@@ -58,7 +58,7 @@ for i = 1, thread_num do
             if transaction then
                 res, err = p:sendMessageInTransaction(topic, message, "tag", "key")
             elseif batch_size == 1 then
-                res, err = p:send(topic, message, "tag", "key", { delayTimeLevel = delay_level })
+                res, err = p:send(topic, message, "tag", "key", { DELAY = delay_level })
             else
                 local msgs = {}
                 for i = 1, batch_size do

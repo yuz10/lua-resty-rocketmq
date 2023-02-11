@@ -63,7 +63,7 @@ __DATA__
                     while running do
                         local res, err
                         if batch_size == 1 then
-                            res, err = p:send(topic, message,"tag","key", {delayTimeLevel=delay_level})
+                            res, err = p:send(topic, message,"tag","key", {DELAY=delay_level})
                         else
                             local msgs = {}
                             for i = 1, batch_size do

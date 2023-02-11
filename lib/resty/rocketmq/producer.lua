@@ -188,6 +188,10 @@ _M.produce = produce
 
 local function genMsg(groupName, topic, message, tags, keys, properties)
     properties = properties or {}
+    properties.UNIQ_KEY = utils.genUniqId()
+    properties.KEYS = keys
+    properties.TAGS = tags
+    properties.WAIT = properties.WAIT or 'true'
     return {
         producerGroup = groupName,
         topic = topic,
@@ -196,13 +200,7 @@ local function genMsg(groupName, topic, message, tags, keys, properties)
         sysFlag = 0,
         bornTimeStamp = ngx.now() * 1000,
         flag = 0,
-        properties = {
-            UNIQ_KEY = utils.genUniqId(),
-            KEYS = keys,
-            TAGS = tags,
-            WAIT = properties.waitStoreMsgOk or 'true',
-            DELAY = properties.delayTimeLevel,
-        },
+        properties = properties,
         reconsumeTimes = 0,
         unitMode = false,
         maxReconsumeTimes = 0,
@@ -315,7 +313,7 @@ function _M:batchSend(msgs)
         flag = 0,
         properties = {
             UNIQ_KEY = utils.genUniqId(),
-            WAIT = first.waitStoreMsgOk,
+            WAIT = first.WAIT,
         },
         reconsumeTimes = 0,
         unitMode = false,

@@ -5,6 +5,7 @@ local tohex = bit.tohex
 local band = bit.band
 local lshift = bit.lshift
 local rshift = bit.rshift
+local bor = bit.bor
 local random = math.random
 local find, sub, append = string.find, string.sub, table.insert
 local byte = string.byte
@@ -286,4 +287,20 @@ function _M.indexOf(t, x)
     return -1
 end
 
+function _M.buildSysFlag(commitOffset, suspend, subscription, classFilter)
+    local flag = 0
+    if commitOffset then
+        flag = bor(flag, 1)
+    end
+    if suspend then
+        flag = bor(flag, 2)
+    end
+    if subscription then
+        flag = bor(flag, 4)
+    end
+    if classFilter then
+        flag = bor(flag, 8)
+    end
+    return flag
+end
 return _M

@@ -67,7 +67,7 @@ function _M:produce_message(topic)
     end
     local properties = data_t.properties or {}
     properties.UNIQ_KEY = utils.genUniqId()
-    properties.waitStoreMsgOk = properties.waitStoreMsgOk or 'true'
+    properties.WAIT = properties.WAIT or 'true'
     local msg = {
         producerGroup = "proxy_producer",
         topic = topic,

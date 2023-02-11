@@ -271,8 +271,8 @@ there is an acl hook provided, usage is:
 `syntax: res, err = p:send(topic, message, tags, keys, properties)`
 
 `properties` is a table that contains:
-   - waitStoreMsgOk
-   - delayTimeLevel
+   - WAIT
+   - DELAY
 
   In case of success, returns the a table of results.
   In case of errors, returns `nil` with a string describing the error.
