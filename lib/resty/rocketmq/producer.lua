@@ -142,6 +142,7 @@ local function produce(self, msg)
     local mqSelected = selectOneMessageQueue(topicPublishInfo)
     local brokerAddr = self.client:findBrokerAddressInPublish(mqSelected.brokerName, msg.topic)
     msg.queueId = mqSelected.queueId
+    msg.bname = mqSelected.brokerName
 
     local context
     if #self.sendMessageHookList > 0 then

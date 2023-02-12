@@ -4,7 +4,6 @@ local utils = require("resty.rocketmq.utils")
 local decoderFromTraceDataString = require("resty.rocketmq.trace").decoderFromTraceDataString
 local bit = require("bit")
 local cjson_safe = require("cjson.safe")
-local decode = require("resty.rocketmq.json").decode
 local split = require("resty.rocketmq.utils").split
 
 local bor = bit.bor

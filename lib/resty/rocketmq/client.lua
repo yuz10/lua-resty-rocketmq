@@ -120,6 +120,7 @@ function _M:sendMessage(brokerAddr, msg)
         k = msg.unitMode,
         l = msg.maxReconsumeTimes,
         m = msg.batch,
+        n = msg.bname,
     }, msg.body, false)
 end
 

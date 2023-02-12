@@ -13,6 +13,9 @@ end
 local _M = {}
 local mt = { __index = _M }
 function _M.doBeforeRequest(self, addr, header, body)
+    if not header then
+        return
+    end
     header.AccessKey = self.accessKey
     header.SecurityToken = self.securityToken
     local keys = {}
