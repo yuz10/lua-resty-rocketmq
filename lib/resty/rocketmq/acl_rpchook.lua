@@ -4,7 +4,7 @@ local encode_base64 = ngx.encode_base64
 local empty = function()
 end
 
-local function hmca_sha1_base64(key, content)
+local function hmac_sha1_base64(key, content)
     local m = resty_hmac:new(key, resty_hmac.ALGOS.SHA1)
     m:update(content)
     return encode_base64(m:final())
@@ -32,7 +32,7 @@ function _M.doBeforeRequest(self, addr, header, body)
     if body then
         content = content .. body
     end
-    header.Signature = hmca_sha1_base64(self.secretKey, content)
+    header.Signature = hmac_sha1_base64(self.secretKey, content)
 end
 _M.doAfterResponse = empty
 

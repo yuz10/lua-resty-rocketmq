@@ -124,6 +124,7 @@ function _M.maxOffset(self, mq)
     local res, _, err = self.client:request(REQUEST_CODE.GET_MAX_OFFSET, brokerAddr, {
         topic = mq.topic,
         queueId = mq.queueId,
+        bname = mq.brokerName,
     })
     if not res then
         return nil, err

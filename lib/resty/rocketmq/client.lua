@@ -308,6 +308,7 @@ function _M:updateConsumeOffsetToBroker(mq, offset)
         consumerGroup = mq.consumerGroup,
         queueId = mq.queueId,
         commitOffset = offset,
+        bname = mq.brokerName,
     }, nil, true)
 end
 
@@ -318,6 +319,7 @@ function _M:fetchConsumeOffsetFromBroker(consumerGroup, mq)
         topic = mq.topic,
         consumerGroup = consumerGroup,
         queueId = mq.queueId,
+        bname = mq.brokerName,
     })
     if not h then
         return nil, err
@@ -366,6 +368,7 @@ function _M:pullKernelImpl(brokerName, header, timeout)
         updateTopicRouteInfoFromNameserver(self, header.topic)
         brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
     end
+    header.bname = brokerName
     local h, b, err = self:request(REQUEST_CODE.PULL_MESSAGE, brokerAddr, header, nil, false, timeout)
     if not h then
         return nil, err

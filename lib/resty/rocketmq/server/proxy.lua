@@ -65,7 +65,8 @@ local processors = {}
 local brokerProcessor = function(self, addr, h, body)
     local header = h.extFields or {}
     if not header.bname and not header.n then
-        return res(RESPONSE_CODE.SYSTEM_ERROR, "bname not fount, 1.make sure client version >= 5.0.0\n2.some commands not supported")
+        ngx.log(ngx.ERR, 'bname not found, code ', core.REQUEST_CODE_NAME[h.code])
+        return res(RESPONSE_CODE.SYSTEM_ERROR, "bname not fount, 1.make sure client version >= 5.0.0; 2.some commands not supported")
     end
     local brokerAddr = getBrokerAddr(self, header.bname or header.n)
     local respHeader, respBody, err = self.client:request(h.code, brokerAddr, header, body, false, self.timeout)
@@ -77,7 +78,7 @@ local brokerProcessor = function(self, addr, h, body)
     return {
         code = respHeader.code,
         header = respHeader.extFields,
-        body = respBody and cjson_safe.encode(respBody) or '',
+        body = respBody or '',
     }
 end
 
@@ -90,15 +91,20 @@ local brokerBroadcastProcessor = function(self, addr, h, body)
         updateClusterInfo(self)
     end
     local finalRespHeader, finalRespBody, finalErr, brokerAddr
+    local count = 0
     for bname, bd in pairs(self.brokerAddrTable) do
         brokerAddr = bd.brokerAddrs[0]
+        count = count + 1
         local respHeader, respBody, err = self.client:request(h.code, brokerAddr, header, body, false, self.timeout)
         if respHeader then
             finalRespHeader = respHeader
-            finalRespBody = finalRespBody
+            finalRespBody = respBody
         else
             finalErr = err
         end
+    end
+    if count == 0 then
+        return res(RESPONSE_CODE.SYSTEM_ERROR, "no broker available")
     end
     if not finalRespHeader then
         return res(RESPONSE_CODE.SYSTEM_ERROR, ("proxy to broker %s error: %s"):format(brokerAddr, finalErr))
@@ -108,7 +114,7 @@ local brokerBroadcastProcessor = function(self, addr, h, body)
     return {
         code = finalRespHeader.code,
         header = finalRespHeader.extFields,
-        body = finalRespBody and cjson_safe.encode(finalRespBody) or '',
+        body = finalRespBody or '',
     }
 end
 
@@ -131,7 +137,7 @@ local brokerSingleProcessor = function(self, addr, h, body)
         return {
             code = respHeader.code,
             header = respHeader.extFields,
-            body = respBody and cjson_safe.encode(respBody) or '',
+            body = respBody or '',
         }
     end
 end
@@ -148,7 +154,7 @@ local namesrvProcessor = function(self, addr, h, body)
     return {
         code = respHeader.code,
         header = h,
-        body = respBody and cjson_safe.encode(respBody) or '',
+        body = respBody or '',
     }
 end
 
@@ -216,7 +222,9 @@ processors[REQUEST_CODE.GET_KVLIST_BY_NAMESPACE] = namesrvProcessor
 processors[REQUEST_CODE.GET_TOPICS_BY_CLUSTER] = namesrvProcessor
 processors[REQUEST_CODE.GET_SYSTEM_TOPIC_LIST_FROM_NS] = namesrvProcessor
 processors[REQUEST_CODE.HEART_BEAT] = brokerBroadcastProcessor
+processors[REQUEST_CODE.UNREGISTER_CLIENT] = brokerBroadcastProcessor
 processors[REQUEST_CODE.GET_CONSUMER_LIST_BY_GROUP] = brokerSingleProcessor
+processors[REQUEST_CODE.UPDATE_AND_CREATE_TOPIC] = brokerBroadcastProcessor
 
 function _M:processRequest(sock, addr, h, body)
     local processor = processors[h.code]
