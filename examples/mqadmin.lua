@@ -2,39 +2,77 @@
 
 package.path = ';../lib/?.lua;' .. package.path
 
+local core = require("resty.rocketmq.core")
 local cjson = require("cjson")
 local admin = require "resty.rocketmq.admin"
 local utils = require("resty.rocketmq.utils")
+local bit = require("bit")
+local bor = bit.bor
 local split = utils.split
 
-local cmds = {}
-table.insert(cmds, { "clusterList", function(args)
-    local ns = args['-n'] or "127.0.0.1:9876"
-    local clusterName = args['-c']
-    local nameservers = split(ns, ';')
-    local adm, err = admin.new(nameservers)
-    if not adm then
-        print("create admin err:", err)
+local function fetchMasterAddrByClusterName(adm, clusterName)
+    local clusterInfo, err = adm:getBrokerClusterInfo()
+    if not clusterInfo then
+        print("get broker cluster info err:", err)
         return
     end
+    local masterAddrs = {}
+    for _, bname in ipairs(clusterInfo.clusterAddrTable[clusterName]) do
+        local broker = clusterInfo.brokerAddrTable[bname]
+        masterAddrs[broker.brokerAddrs[0]] = true
+    end
+    return utils.keys(masterAddrs)
+end
+
+local function getBrokerAddrs(adm, clusterName, brokerAddr)
+    if clusterName then
+        return fetchMasterAddrByClusterName(adm, clusterName);
+    elseif brokerAddr then
+        return { brokerAddr }
+    else
+        error('no broker or cluster')
+    end
+end
+
+local cmds = {}
+table.insert(cmds, { "updateTopic", function(adm, args)
+    local clusterName = args['-c']
+    local brokerAddr = args['-b']
+    local order = args['-o']
+    local perm = args['-p']
+    local readQueueNum = args['-r']
+    local writeQueueNum = args['-w']
+    local topic = args['-t']
+    for _, addr in ipairs(getBrokerAddrs(adm, clusterName, brokerAddr)) do
+        local topicConf = {
+            topicName = topic,
+            readQueueNums = readQueueNum or 8,
+            writeQueueNums = writeQueueNum or 8,
+            perm = perm or bor(core.PERM_READ, core.PERM_WRITE),
+            topicFilterType = "SINGLE_TAG",
+            topicSysFlag = 0,
+            order = order,
+        }
+        local res, err = adm:createTopicForBroker(addr, topicConf)
+        if res then
+            print(("create topic to %s success."):format(addr))
+            print(cjson.encode(topicConf))
+        else
+            print("create topic err:", err)
+            return
+        end
+    end
+end })
+
+table.insert(cmds, { "clusterList", function(adm, args)
+    local clusterName = args['-c']
     local clusterInfo, err = adm:getBrokerClusterInfo()
     if not clusterInfo then
         print("get broker cluster info err:", err)
         return
     end
     print(("%-22s  %-22s  %-4s  %-22s %-16s  %16s  %16s  %-22s  %-11s  %-12s  %-8s  %-10s"):format(
-            "#Cluster Name",
-            "#Broker Name",
-            "#BID",
-            "#Addr",
-            "#Version",
-            "#InTPS(LOAD)",
-            "#OutTPS(LOAD)",
-            "#Timer(Progress)",
-            "#PCWait(ms)",
-            "#Hour",
-            "#SPACE",
-            "#ACTIVATED"
+            "#Cluster Name", "#Broker Name", "#BID", "#Addr", "#Version", "#InTPS(LOAD)", "#OutTPS(LOAD)", "#Timer(Progress)", "#PCWait(ms)", "#Hour", "#SPACE", "#ACTIVATED"
     ))
     for cname, brokers in pairs(clusterInfo.clusterAddrTable) do
         if clusterName == nil or cname == clusterName then
@@ -81,9 +119,16 @@ local res, err = pcall(function()
     for i = 2, #arg, 2 do
         args[arg[i]] = arg[i + 1]
     end
+    local ns = args['-n'] or "127.0.0.1:9876"
+    local nameservers = split(ns, ';')
+    local adm, err = admin.new(nameservers)
+    if not adm then
+        print("create admin err:", err)
+        return
+    end
     for _, cmd in ipairs(cmds) do
         if string.lower(cmd[1]) == cmdName then
-            cmd[2](args)
+            cmd[2](adm, args)
         end
     end
 end)

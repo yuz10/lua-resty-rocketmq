@@ -90,11 +90,9 @@ function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
         local addr = bd.brokerAddrs[0]
         if addr then
             local res, _
-            res, _, createErr = _M.createTopicForBroker(self, addr, topicConfig)
-            if res and res.code == RESPONSE_CODE.SUCCESS then
+            res, createErr = _M.createTopicForBroker(self, addr, topicConfig)
+            if res then
                 createOKAtLeastOnce = true
-            else
-                createErr = createErr or res.remark
             end
         end
     end
@@ -105,7 +103,7 @@ function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
 end
 
 function _M.createTopicForBroker(self, addr, topicConfig)
-    return self.client:request(REQUEST_CODE.UPDATE_AND_CREATE_TOPIC, addr, {
+    local res, _, err = self.client:request(REQUEST_CODE.UPDATE_AND_CREATE_TOPIC, addr, {
         topic = topicConfig.topicName,
         defaultTopic = "TBW102",
         readQueueNums = topicConfig.readQueueNums or 16,
@@ -115,6 +113,10 @@ function _M.createTopicForBroker(self, addr, topicConfig)
         topicSysFlag = topicConfig.topicSysFlag or 0,
         order = topicConfig.order or false,
     })
+    if res and res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
+    end
+    return res, err
 end
 
 function _M.searchOffset(self, mq, timestamp)

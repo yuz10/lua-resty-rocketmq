@@ -589,6 +589,7 @@ function _M:pop(mq, invisibleTime, maxNums, consumerGroup, timeout, poll, initMo
     elseif h.code == RESPONSE_CODE.PULL_NOT_FOUND then
         status = _M.POLLING_NOT_FOUND
     else
+        log(WARN, ('pop return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or ''))
         return nil, ('pop return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
     end
     if status ~= _M.FOUND then
