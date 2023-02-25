@@ -5,6 +5,7 @@ local decoderFromTraceDataString = require("resty.rocketmq.trace").decoderFromTr
 local bit = require("bit")
 local cjson_safe = require("cjson.safe")
 local split = require("resty.rocketmq.utils").split
+local decode = require("resty.rocketmq.json").decode
 
 local bor = bit.bor
 local REQUEST_CODE = core.REQUEST_CODE
@@ -40,6 +41,23 @@ end
 
 function _M.setTimeout(self, timeout)
     self.client:setTimeout(timeout)
+end
+
+function _M.getBrokerClusterInfo(self)
+    local addr = self.client:chooseNameserver()
+    local res, body, err = self.client:request(REQUEST_CODE.GET_BROKER_CLUSTER_INFO, addr, {})
+    if not res then
+        return nil, err
+    end
+    return decode(body)
+end
+
+function _M.fetchBrokerRuntimeStats(self, brokerAddr)
+    local res, body, err = self.client:request(REQUEST_CODE.GET_BROKER_RUNTIME_INFO, brokerAddr, {})
+    if not res then
+        return nil, err
+    end
+    return cjson_safe.decode(body)
 end
 
 function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
