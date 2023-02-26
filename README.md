@@ -90,7 +90,7 @@ Production ready.
 Description
 ===========
 
-This Lua library is a RocketMq client driver for the ngx_lua nginx module:
+This Lua library is a RocketMQ client driver for the ngx_lua nginx module:
 
 This Lua library takes advantage of ngx_lua's cosocket API, which ensures
 100% nonblocking behavior.
@@ -111,9 +111,9 @@ see https://openresty.org/cn/linux-packages.html for more distributions
 
 ### Install and start RocketMQ
 ```shell
-wget https://archive.apache.org/dist/rocketmq/4.9.3/rocketmq-all-4.9.3-bin-release.zip
-unzip rocketmq-all-4.9.3-bin-release.zip
-cd rocketmq-4.9.3
+wget https://archive.apache.org/dist/rocketmq/5.1.0/rocketmq-all-5.1.0-bin-release.zip
+unzip rocketmq-all-5.1.0-bin-release.zip
+cd rocketmq-5.1.0
 nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
@@ -613,9 +613,9 @@ HTTP proxy provides http API of produce/consume messages. RocketMQ >= 5.0.0 is r
 Install and start RocketMQ
 
 ```shell
-wget https://archive.apache.org/dist/rocketmq/5.0.0/rocketmq-all-5.0.0-bin-release.zip
-unzip rocketmq-all-5.0.0-bin-release.zip
-cd rocketmq-5.0.0
+wget https://archive.apache.org/dist/rocketmq/5.1.0/rocketmq-all-5.1.0-bin-release.zip
+unzip rocketmq-all-5.1.0-bin-release.zip
+cd rocketmq-5.1.0
 nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
