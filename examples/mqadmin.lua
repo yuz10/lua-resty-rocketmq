@@ -11,7 +11,7 @@ local bor = bit.bor
 local split = utils.split
 
 local function fetchMasterAddrByClusterName(adm, clusterName)
-    local clusterInfo, err = adm:getBrokerClusterInfo()
+    local clusterInfo, err = adm:examineBrokerClusterInfo()
     if not clusterInfo then
         print("get broker cluster info err:", err)
         return
@@ -26,7 +26,7 @@ end
 
 local function getBrokerAddrs(adm, clusterName, brokerAddr)
     if clusterName then
-        return fetchMasterAddrByClusterName(adm, clusterName);
+        return fetchMasterAddrByClusterName(adm, clusterName)
     elseif brokerAddr then
         return { brokerAddr }
     else
@@ -64,9 +64,70 @@ table.insert(cmds, { "updateTopic", function(adm, args)
     end
 end })
 
+table.insert(cmds, { "deleteTopic", function(adm, args)
+    local clusterName = args['-c']
+    local topic = args['-t']
+    if clusterName == nil then
+        print("no clusterName")
+        return
+    end
+    local res, err = adm:deleteTopicInBroker(fetchMasterAddrByClusterName(adm, clusterName), topic)
+    if not res then
+        print("delete topic in broker err:", err)
+        return
+    end
+    local res, err = adm:deleteTopicInNameServer(topic)
+    if not res then
+        print("delete topic in nameserver err:", err)
+        return
+    end
+    print(("delete topic %s success."):format(topic))
+end })
+
+table.insert(cmds, { "topicList", function(adm, args)
+    local clusterName = args['-c']
+    local topics, err = adm:getTopicListFromNameServer()
+    if not topics then
+        print("get topic list err:", err)
+        return
+    end
+    if clusterName then
+        print(("%-20s  %-48s  %-48s"):format("#Cluster Name", "#Topic", "#Consumer Group"))
+        local clusterInfo = adm:examineBrokerClusterInfo()
+        print(cjson.encode(clusterInfo))
+        for _, topic in ipairs(topics.topicList) do
+            if not utils.startsWith(topic, core.RETRY_GROUP_TOPIC_PREFIX) then
+                local topicRouteData = adm.client:getTopicRouteInfoFromNameserver(topic)
+                local brokerName = topicRouteData.brokerDatas[1].brokerName
+                local cluster = ''
+                for clusterName, brokers in pairs(clusterInfo.clusterAddrTable) do
+                    for _, bName in ipairs(brokers) do
+                        if bName == brokerName then
+                            cluster = clusterName
+                            goto out
+                        end
+                    end
+                end
+                :: out ::
+                local groupList = adm:queryTopicConsumeByWho(topic).groupList
+                if groupList == nil or #groupList == 0 then
+                    groupList = { "" }
+                end
+                for _, group in ipairs(groupList) do
+                    print(("%-20s  %-48s  %-48s"):format(cluster, topic, group))
+                end
+            end
+        end
+    else
+        for _, topic in ipairs(topics.topicList) do
+            print(topic)
+        end
+    end
+end })
+
 table.insert(cmds, { "clusterList", function(adm, args)
     local clusterName = args['-c']
-    local clusterInfo, err = adm:getBrokerClusterInfo()
+    local clusterInfo, err = adm:examineBrokerClusterInfo()
     if not clusterInfo then
         print("get broker cluster info err:", err)
         return

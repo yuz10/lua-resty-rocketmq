@@ -43,11 +43,14 @@ function _M.setTimeout(self, timeout)
     self.client:setTimeout(timeout)
 end
 
-function _M.getBrokerClusterInfo(self)
+function _M.examineBrokerClusterInfo(self)
     local addr = self.client:chooseNameserver()
     local res, body, err = self.client:request(REQUEST_CODE.GET_BROKER_CLUSTER_INFO, addr, {})
     if not res then
         return nil, err
+    end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
     end
     return decode(body)
 end
@@ -56,6 +59,9 @@ function _M.fetchBrokerRuntimeStats(self, brokerAddr)
     local res, body, err = self.client:request(REQUEST_CODE.GET_BROKER_RUNTIME_INFO, brokerAddr, {})
     if not res then
         return nil, err
+    end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
     end
     return cjson_safe.decode(body)
 end
@@ -71,19 +77,19 @@ function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
     if not topicRouteData then
         return nil, err
     end
-
+    
     local brokerDataList = topicRouteData.brokerDatas
     if brokerDataList == nil or #brokerDataList == 0 then
         return nil, 'Not found broker, maybe key is wrong'
     end
-
+    
     local topicConfig = {
         topicName = newTopic,
         readQueueNums = queueNum,
         writeQueueNums = queueNum,
         topicSysFlag = topicSysFlag or 0,
     }
-
+    
     local createOKAtLeastOnce = false
     local createErr
     for _, bd in ipairs(brokerDataList) do
@@ -119,6 +125,58 @@ function _M.createTopicForBroker(self, addr, topicConfig)
     return res, err
 end
 
+function _M.deleteTopicInBroker(self, addrs, topic)
+    for _, addr in ipairs(addrs) do
+        local res, _, err = self.client:request(REQUEST_CODE.DELETE_TOPIC_IN_BROKER, addr, {
+            topic = topic,
+        })
+        if res and res.code ~= RESPONSE_CODE.SUCCESS then
+            return nil, res.remark
+        end
+        return res, err
+    end
+end
+
+function _M.deleteTopicInNameServer(self, topic)
+    for _, addr in ipairs(self.client.nameservers) do
+        local res, _, err = self.client:request(REQUEST_CODE.DELETE_TOPIC_IN_NAMESRV, addr, {
+            topic = topic,
+        })
+        if res and res.code ~= RESPONSE_CODE.SUCCESS then
+            return nil, res.remark
+        end
+        return res, err
+    end
+end
+
+function _M.getTopicListFromNameServer(self)
+    local addr = self.client:chooseNameserver()
+    local res, body, err = self.client:request(REQUEST_CODE.GET_ALL_TOPIC_LIST_FROM_NAMESERVER, addr, {})
+    if not res then
+        return nil, err
+    end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
+    end
+    return cjson_safe.decode(body)
+end
+
+function _M.queryTopicConsumeByWho(self, topic)
+    local topicRouteData = self.client:getTopicRouteInfoFromNameserver(topic)
+    for _, bd in ipairs(topicRouteData.brokerDatas) do
+        local res, body, err = self.client:request(REQUEST_CODE.QUERY_TOPIC_CONSUME_BY_WHO, bd.brokerAddrs[0], {
+            topic = topic
+        })
+        if not res then
+            return nil, err
+        end
+        if res.code ~= RESPONSE_CODE.SUCCESS then
+            return nil, res.remark
+        end
+        return cjson_safe.decode(body)
+    end
+end
+
 function _M.searchOffset(self, mq, timestamp)
     local brokerAddr = self.client:findBrokerAddressInPublish(mq.brokerName, mq.topic)
     if not brokerAddr then
@@ -131,6 +189,9 @@ function _M.searchOffset(self, mq, timestamp)
     })
     if not res then
         return nil, err
+    end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
     end
     local header = cjson_safe.decode(res)
     return header.offset
@@ -149,6 +210,9 @@ function _M.maxOffset(self, mq)
     if not res then
         return nil, err
     end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
+    end
     return tonumber(res.extFields.offset)
 end
 
@@ -163,6 +227,9 @@ function _M.minOffset(self, mq)
     })
     if not res then
         return nil, err
+    end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
     end
     return tonumber(res.extFields.offset)
 end
@@ -179,6 +246,9 @@ function _M.earliestMsgStoreTime(self, mq)
     if not res then
         return nil, err
     end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
+    end
     return tonumber(res.extFields.timestamp)
 end
 
@@ -192,6 +262,9 @@ function _M.viewMessage(self, offsetMsgId)
     })
     if not res then
         return nil, err
+    end
+    if res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
     end
     return core.decodeMsg(body, true, true)
 end
