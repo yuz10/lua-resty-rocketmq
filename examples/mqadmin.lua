@@ -114,7 +114,14 @@ table.insert(cmds, { "topicRoute", function(adm, args)
         print("get topic route err:", err)
         return
     end
-    print(cjson.encode(topicRouteData))
+    print("brokerDatas:")
+    for _, bd in ipairs(topicRouteData.brokerDatas) do
+        print('    ', cjson.encode(bd))
+    end
+    print("queueDatas:")
+    for _, qd in ipairs(topicRouteData.queueDatas) do
+        print('    ', cjson.encode(qd))
+    end
 end })
 
 table.insert(cmds, { "topicList", function(adm, args)
