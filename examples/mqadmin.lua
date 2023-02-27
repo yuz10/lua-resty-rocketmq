@@ -84,6 +84,29 @@ table.insert(cmds, { "deleteTopic", function(adm, args)
     print(("delete topic %s success."):format(topic))
 end })
 
+table.insert(cmds, { "topicStatus", function(adm, args)
+    local topic = args['-t']
+    local topicStatsTable, err = adm:examineTopicStats(topic)
+    if not topicStatsTable then
+        print("get topic in stats err:", err)
+        return
+    end
+    print(("%-32s  %-4s  %-20s  %-20s    %s"):format("#Broker Name", "#QID", "#Min Offset", "#Max Offset", "#Last Updated"))
+    local mqList = utils.keys(topicStatsTable)
+    table.sort(mqList)
+    for _, mqKey in ipairs(mqList) do
+        local mq = utils.buildMq(mqKey)
+        local stats = topicStatsTable[mqKey]
+        print(("%-32s  %-4d  %-20d  %-20d    %s"):format(
+                mq.brokerName,
+                mq.queueId,
+                stats.minOffset,
+                stats.maxOffset,
+                stats.lastUpdateTimestamp == 0 and '' or utils.timeMillisToHumanString2(stats.lastUpdateTimestamp)
+        ))
+    end
+end })
+
 table.insert(cmds, { "topicList", function(adm, args)
     local clusterName = args['-c']
     local topics, err = adm:getTopicListFromNameServer()

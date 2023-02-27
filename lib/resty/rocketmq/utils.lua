@@ -62,7 +62,7 @@ do
     for i = 1, #s do
         h2b[byte(s, i)] = i - 1
     end
-
+    
     s = 'ABCDEF'
     local s2 = s:lower()
     for i = 1, #s do
@@ -127,13 +127,13 @@ function _M.createMessageId(ip, port, offset)
         portInt[5 - i] = char(band(port, 0xff))
         port = rshift(port, 8)
     end
-
+    
     local offsetLong = {}
     for i = 1, 8 do
         offsetLong[9 - i] = char(band(offset, 0xff))
         offset = rshift(offset, 8)
     end
-
+    
     return toHex(ip .. table.concat(portInt) .. table.concat(offsetLong))
 end
 
@@ -194,13 +194,17 @@ local function timestamp(year, month, day, hour, min, sec)
             + 365 * (year - 1970)
             -- Each leap year adds one day
             + (leap_years_since(year - 1) - leap_years_since_1970) - 1
-
+    
     return days_since_epoch * (60 * 60 * 24)
             + hour * (60 * 60)
             + min * 60
             + sec
 end
 _M.timestamp = timestamp
+
+function _M.timeMillisToHumanString2(timestamp)
+    return os.date("%Y-%m-%d %X", timestamp / 1000) .. (",%03d"):format(timestamp % 1000)
+end
 
 do
     local ip = char(127) .. char(0) .. char(0) .. char(1)
@@ -211,7 +215,7 @@ do
     local timeDiffEightHours = 8 * 60 * 60
     local thisMonth = 0
     local nextMonth = 0
-
+    
     _M.genUniqId = function()
         local time = ngx.now()
         if time >= nextMonth then
@@ -257,7 +261,7 @@ function _M.java_hash(s)
     local h = 0
     for i = 1, #s do
         h = 31 * h + byte(s, i);
-        h = band(2^32-1, h)
+        h = band(2 ^ 32 - 1, h)
     end
     return h
 end

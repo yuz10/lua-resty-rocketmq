@@ -149,6 +149,37 @@ function _M.deleteTopicInNameServer(self, topic)
     end
 end
 
+function _M.getTopicStatsInfo(self, addr, topic)
+    local res, body, err = self.client:request(REQUEST_CODE.GET_TOPIC_STATS_INFO, addr, {
+        topic = topic,
+    })
+    if res and res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
+    end
+    return decode(body)
+end
+
+function _M.examineTopicStats(self, topic)
+    local topicRouteData, err = self.client:getTopicRouteInfoFromNameserver(topic)
+    if not topicRouteData then
+        return nil, err
+    end
+    local offsetTable = {}
+    for _, bd in ipairs(topicRouteData.brokerDatas) do
+        local brokerAddr = bd.brokerAddrs[0]
+        if brokerAddr then
+            local topicStatsTable, err = self:getTopicStatsInfo(brokerAddr, topic)
+            if not topicStatsTable then
+                return nil, err
+            end
+            for k, v in pairs(topicStatsTable.offsetTable) do
+                offsetTable[utils.buildMqKey(k)] = v
+            end
+        end
+    end
+    return offsetTable
+end
+
 function _M.getTopicListFromNameServer(self)
     local addr = self.client:chooseNameserver()
     local res, body, err = self.client:request(REQUEST_CODE.GET_ALL_TOPIC_LIST_FROM_NAMESERVER, addr, {})
