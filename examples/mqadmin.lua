@@ -88,7 +88,7 @@ table.insert(cmds, { "topicStatus", function(adm, args)
     local topic = args['-t']
     local topicStatsTable, err = adm:examineTopicStats(topic)
     if not topicStatsTable then
-        print("get topic in stats err:", err)
+        print("get topic stats err:", err)
         return
     end
     print(("%-32s  %-4s  %-20s  %-20s    %s"):format("#Broker Name", "#QID", "#Min Offset", "#Max Offset", "#Last Updated"))
@@ -105,6 +105,16 @@ table.insert(cmds, { "topicStatus", function(adm, args)
                 stats.lastUpdateTimestamp == 0 and '' or utils.timeMillisToHumanString2(stats.lastUpdateTimestamp)
         ))
     end
+end })
+
+table.insert(cmds, { "topicRoute", function(adm, args)
+    local topic = args['-t']
+    local topicRouteData, err = adm.client:getTopicRouteInfoFromNameserver(topic)
+    if not topicRouteData then
+        print("get topic route err:", err)
+        return
+    end
+    print(cjson.encode(topicRouteData))
 end })
 
 table.insert(cmds, { "topicList", function(adm, args)
