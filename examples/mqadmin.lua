@@ -50,6 +50,24 @@ local function getMasterAddrs(adm, clusterName, brokerAddr)
     end
 end
 
+local function printMsg(msg)
+    print(("%-20s %s"):format("OffsetID:", msg.offsetMsgId))
+    print(("%-20s %s"):format("Topic:", msg.topic))
+    print(("%-20s [%s]"):format("Tags:", msg.properties.TAGS))
+    print(("%-20s [%s]"):format("Keys:", msg.properties.KEYS))
+    print(("%-20s %s"):format("Queue ID:", msg.queueId))
+    print(("%-20s %s"):format("Queue Offset:", msg.queueOffset))
+    print(("%-20s %s"):format("CommitLog Offset:", msg.commitLogOffset))
+    print(("%-20s %s"):format("Reconsume Times:", msg.reconsumeTimes))
+    print(("%-20s %s"):format("Born Timestamp:", utils.timeMillisToHumanString2(msg.bornTimeStamp)))
+    print(("%-20s %s"):format("Store Timestamp:", utils.timeMillisToHumanString2(msg.storeTimestamp)))
+    print(("%-20s %s"):format("Born Host:", msg.bornHost))
+    print(("%-20s %s"):format("Store Host:", msg.storeHost))
+    print(("%-20s %s"):format("System Flag:", msg.sysFlag))
+    print(("%-20s %s"):format("Properties:", cjson.encode(msg.properties)))
+    print(("%-20s %s"):format("Message Body:", msg.body))
+end
+
 local cmds = {}
 table.insert(cmds, { "updateTopic", function(adm, args)
     local clusterName = args['-c']
@@ -78,7 +96,21 @@ table.insert(cmds, { "updateTopic", function(adm, args)
             return
         end
     end
-end })
+    return true
+end, [[usage: mqadmin updateTopic [-a <arg>] -b <arg> | -c <arg>  [-h] [-n <arg>] [-o <arg>] [-p <arg>] [-r <arg>]
+       [-s <arg>] -t <arg> [-u <arg>] [-w <arg>]
+ -a,--attributes <arg>       attribute(+a=b,+c=d,-e)
+ -b,--brokerAddr <arg>       create topic to which broker
+ -c,--clusterName <arg>      create topic to which cluster
+ -h,--help                   Print help
+ -n,--namesrvAddr <arg>      Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -o,--order <arg>            set topic's order(true|false)
+ -p,--perm <arg>             set topic's permission(2|4|6), intro[2:W 4:R; 6:RW]
+ -r,--readQueueNums <arg>    set read queue nums
+ -s,--hasUnitSub <arg>       has unit sub (true|false)
+ -t,--topic <arg>            topic name
+ -u,--unit <arg>             is unit topic (true|false)
+ -w,--writeQueueNums <arg>   set write queue nums]] })
 
 table.insert(cmds, { "deleteTopic", function(adm, args)
     local clusterName = args['-c']
@@ -98,7 +130,12 @@ table.insert(cmds, { "deleteTopic", function(adm, args)
         return
     end
     print(("delete topic %s success."):format(topic))
-end })
+    return true
+end, [[usage: mqadmin deleteTopic -c <arg> [-h] [-n <arg>] -t <arg>
+ -c,--clusterName <arg>   delete topic from which cluster
+ -h,--help                Print help
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -t,--topic <arg>         topic name]] })
 
 table.insert(cmds, { "topicStatus", function(adm, args)
     local topic = args['-t']
@@ -121,7 +158,11 @@ table.insert(cmds, { "topicStatus", function(adm, args)
                 stats.lastUpdateTimestamp == 0 and '' or utils.timeMillisToHumanString2(stats.lastUpdateTimestamp)
         ))
     end
-end })
+    return true
+end, [[usage: mqadmin topicStatus [-h] [-n <arg>] -t <arg>
+ -h,--help                Print help
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -t,--topic <arg>         topic name]] })
 
 table.insert(cmds, { "topicRoute", function(adm, args)
     local topic = args['-t']
@@ -138,7 +179,12 @@ table.insert(cmds, { "topicRoute", function(adm, args)
     for _, qd in ipairs(topicRouteData.queueDatas) do
         print('    ', cjson.encode(qd))
     end
-end })
+    return true
+end, [[usage: mqadmin topicRoute [-h] [-l] [-n <arg>] -t <arg>
+ -h,--help                Print help
+ -l,--list                Use list format to print data
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -t,--topic <arg>         topic name]] })
 
 table.insert(cmds, { "topicList", function(adm, args)
     local clusterName = args['-c']
@@ -179,7 +225,11 @@ table.insert(cmds, { "topicList", function(adm, args)
             print(topic)
         end
     end
-end })
+    return true
+end, [[usage: mqadmin topicList [-c] [-h] [-n <arg>]
+ -c,--clusterModel        clusterModel
+ -h,--help                Print help
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876']] })
 
 table.insert(cmds, { "clusterList", function(adm, args)
     local clusterName = args['-c']
@@ -221,7 +271,13 @@ table.insert(cmds, { "clusterList", function(adm, args)
             end
         end
     end
-end })
+    return true
+end, [[usage: mqadmin clusterList [-c <arg>] [-h] [-i <arg>] [-m] [-n <arg>]
+ -c,--clusterName <arg>   which cluster
+ -h,--help                Print help
+ -i,--interval <arg>      specify intervals numbers, it is in seconds
+ -m,--moreStats           Print more stats
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876']] })
 
 table.insert(cmds, { "brokerStatus", function(adm, args)
     local function printBrokerRuntimeStats(brokerAddr, printBroker)
@@ -248,7 +304,32 @@ table.insert(cmds, { "brokerStatus", function(adm, args)
             printBrokerRuntimeStats(addr, true)
         end
     end
-end })
+    return true
+end, [[usage: mqadmin brokerStatus -b <arg> | -c <arg>  [-h] [-n <arg>]
+ -b,--brokerAddr <arg>    Broker address
+ -c,--clusterName <arg>   which cluster
+ -h,--help                Print help
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876']] })
+
+table.insert(cmds, { "queryMsgById", function(adm, args)
+    local msgIds = split(args['-i'], ',')
+    if #msgIds == 0 then
+        return
+    end
+    for _, msgId in ipairs(msgIds) do
+        local msg = adm:viewMessage(msgId)
+        printMsg(msg)
+    end
+    return true
+end, [[usage: mqadmin queryMsgById [-d <arg>] [-f <arg>] [-g <arg>] [-h] -i <arg> [-n <arg>] [-s <arg>] [-u <arg>]
+ -d,--clientId <arg>        The consumer's client id
+ -f,--bodyFormat <arg>      print message body by the specified format
+ -g,--consumerGroup <arg>   consumer group name
+ -h,--help                  Print help
+ -i,--msgId <arg>           Message Id
+ -n,--namesrvAddr <arg>     Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -s,--sendMessage <arg>     resend message
+ -u,--unitName <arg>        unit name]] })
 
 local function help()
     print("The most commonly used mqadmin commands are:")
@@ -257,28 +338,57 @@ local function help()
     end
 end
 
+local cmdName, args
 local res, err = pcall(function()
-    local cmdName = string.lower(arg[1])
-    local args = {}
+    cmdName = string.lower(arg[1])
+    args = {}
     for i = 2, #arg, 2 do
         args[arg[i]] = arg[i + 1]
-    end
-    local ns = args['-n'] or "127.0.0.1:9876"
-    local nameservers = split(ns, ';')
-    local adm, err = admin.new(nameservers)
-    if not adm then
-        print("create admin err:", err)
-        return
-    end
-    for _, cmd in ipairs(cmds) do
-        if string.lower(cmd[1]) == cmdName then
-            cmd[2](adm, args)
-        end
     end
 end)
 if not res then
     print(err)
     help()
+    return
+end
+
+local ns = args['-n'] or "127.0.0.1:9876"
+local nameservers = split(ns, ';')
+local adm, err = admin.new(nameservers)
+if not adm then
+    print("create admin err:", err)
+    return
+end
+
+local cmd
+for _, c in ipairs(cmds) do
+    if string.lower(c[1]) == cmdName then
+        cmd = c
+        break
+    end
+end
+
+if not cmd then
+    help()
+    return
+end
+
+if args['-h'] then
+    if cmd[3] then
+        print(cmd[3])
+    end
+    return
+end
+
+local result
+local res, err = pcall(function()
+    result = cmd[2](adm, args)
+end)
+if not res or not result then
+    print(err)
+    if cmd[3] then
+        print(cmd[3])
+    end
 end
 
 
