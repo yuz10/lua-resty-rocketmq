@@ -24,7 +24,23 @@ local function fetchMasterAddrByClusterName(adm, clusterName)
     return utils.keys(masterAddrs)
 end
 
-local function getBrokerAddrs(adm, clusterName, brokerAddr)
+local function fetchMasterAndSlaveAddrByClusterName(adm, clusterName)
+    local clusterInfo, err = adm:examineBrokerClusterInfo()
+    if not clusterInfo then
+        print("get broker cluster info err:", err)
+        return
+    end
+    local addrs = {}
+    for _, bname in ipairs(clusterInfo.clusterAddrTable[clusterName]) do
+        local broker = clusterInfo.brokerAddrTable[bname]
+        for _, addr in pairs(broker.brokerAddrs) do
+            addrs[addr] = true
+        end
+    end
+    return utils.keys(addrs)
+end
+
+local function getMasterAddrs(adm, clusterName, brokerAddr)
     if clusterName then
         return fetchMasterAddrByClusterName(adm, clusterName)
     elseif brokerAddr then
@@ -43,7 +59,7 @@ table.insert(cmds, { "updateTopic", function(adm, args)
     local readQueueNum = args['-r']
     local writeQueueNum = args['-w']
     local topic = args['-t']
-    for _, addr in ipairs(getBrokerAddrs(adm, clusterName, brokerAddr)) do
+    for _, addr in ipairs(getMasterAddrs(adm, clusterName, brokerAddr)) do
         local topicConf = {
             topicName = topic,
             readQueueNums = readQueueNum or 8,
@@ -203,6 +219,33 @@ table.insert(cmds, { "clusterList", function(adm, args)
                     end
                 end
             end
+        end
+    end
+end })
+
+table.insert(cmds, { "brokerStatus", function(adm, args)
+    local function printBrokerRuntimeStats(brokerAddr, printBroker)
+        local kvTable, err = adm:fetchBrokerRuntimeStats(brokerAddr)
+        if err then
+            print("get broker runtime stats error, ", err)
+            return
+        end
+        for k, v in pairs(kvTable.table) do
+            if printBroker then
+                print(("%-24s %-32s: %s"):format(brokerAddr, k, v))
+            else
+                print(("%-32s: %s"):format(k, v))
+            end
+        end
+    end
+    local clusterName = args['-c']
+    local brokerAddr = args['-b']
+    if brokerAddr then
+        printBrokerRuntimeStats(brokerAddr, false)
+    else
+        local addrs = fetchMasterAndSlaveAddrByClusterName(adm, clusterName)
+        for _, addr in ipairs(addrs) do
+            printBrokerRuntimeStats(addr, true)
         end
     end
 end })
