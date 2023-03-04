@@ -39,8 +39,8 @@ function produceHook.sendMessageBefore(self, context)
         traceBeans = {
             {
                 topic = context.message.topic,
-                tags = context.message.properties.TAGS or '',
-                keys = context.message.properties.KEYS or '',
+                tags = context.message.properties.TAGS or 'null',
+                keys = context.message.properties.KEYS or 'null',
                 storeHost = context.brokerAddr,
                 bodyLength = #context.message.body,
                 msgType = context.msgType,
@@ -72,8 +72,8 @@ function produceHook.endTransaction(self, context)
         traceBeans = {
             {
                 topic = context.message.topic,
-                tags = context.message.properties.TAGS or '',
-                keys = context.message.properties.KEYS or '',
+                tags = context.message.properties.TAGS or 'null',
+                keys = context.message.properties.KEYS or 'null',
                 storeHost = context.brokerAddr,
                 msgType = core.Trans_msg_Commit,
                 msgId = context.msgId,
@@ -102,8 +102,8 @@ function consumeHook.consumeMessageBefore(self, context)
         table.insert(context.traceContext.traceBeans, {
             topic = message.topic,
             msgId = message.properties.UNIQ_KEY,
-            tags = message.properties.TAGS or '',
-            keys = message.properties.KEYS or '',
+            tags = message.properties.TAGS or 'null',
+            keys = message.properties.KEYS or 'null',
             storeTime = message.storeTimestamp,
             bodyLength = message.storeSize,
             retryTimes = message.reconsumeTimes,
@@ -119,7 +119,7 @@ function consumeHook.consumeMessageAfter(self, context)
     end
     local subAfterContext = {
         traceType = _M.SubAfter,
-        groupName = subBeforeContext.consumerGroup,
+        groupName = subBeforeContext.groupName,
         timestamp = ngx.now() * 1000,
         requestId = subBeforeContext.requestId,
         success = context.success,

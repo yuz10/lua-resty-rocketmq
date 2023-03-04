@@ -338,7 +338,7 @@ end, [[usage: mqadmin queryMsgById [-d <arg>] [-f <arg>] [-g <arg>] [-h] -i <arg
 table.insert(cmds, { "queryMsgByKey", function(adm, args)
     local topic = args['-t']
     local key = args['-k']
-    local msgs, err = adm:queryMessage(topic, key, 64, 0, 0x7fffffffffffffff, false)
+    local msgs, err = adm:queryMessage(topic, key, 64, 0, (ngx.now() + 10) * 1000, false)
     if not msgs then
         print('query msg fail:', err)
         return
@@ -357,7 +357,7 @@ end, [[usage: mqadmin queryMsgByKey [-h] -k <arg> [-n <arg>] -t <arg>
 table.insert(cmds, { "queryMsgByUniqueKey", function(adm, args)
     local topic = args['-t']
     local msgId = args['-i']
-    local msgs, err = adm:queryMessage(topic, msgId, 64, 0, 0x7fffffffffffffff, true)
+    local msgs, err = adm:queryMessage(topic, msgId, 64, 0, (ngx.now() + 10) * 1000, true)
     if not msgs then
         print('query msg fail:', err)
         return
@@ -381,7 +381,7 @@ table.insert(cmds, { "queryMsgByOffset", function(adm, args)
     local brokerName = args['-b']
     local queueId = args['-i']
     local offset = args['-o']
-    local pullResult, err = p.client:pullKernelImpl(brokerName, {
+    local pullResult, err = adm.client:pullKernelImpl(brokerName, {
         consumerGroup = "TOOLS_CONSUMER",
         topic = topic,
         queueId = queueId,

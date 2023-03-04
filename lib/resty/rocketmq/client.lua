@@ -31,7 +31,7 @@ function _M.new(nameservers, processor)
         RPCHook = {},
         useTLS = false,
         timeout = 3000,
-
+        
         topicPublishInfoTable = {},
         topicSubscribeInfoTable = {},
         topicRouteTable = {},
@@ -205,12 +205,12 @@ local function updateTopicRouteInfoFromNameserver(self, topic)
     end
     local publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData)
     self.topicPublishInfoTable[topic] = publishInfo
-
+    
     local subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData)
     self.topicSubscribeInfoTable[topic] = subscribeInfo
-
+    
     self.topicRouteTable[topic] = topicRouteData
-
+    
     for _, bd in ipairs(topicRouteData.brokerDatas) do
         self.brokerAddrTable[bd.brokerName] = bd.brokerAddrs
     end
@@ -302,7 +302,7 @@ end
 
 function _M:updateConsumeOffsetToBroker(mq, offset)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
-
+    
     return self:request(REQUEST_CODE.UPDATE_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = mq.consumerGroup,
@@ -314,7 +314,7 @@ end
 
 function _M:fetchConsumeOffsetFromBroker(consumerGroup, mq)
     local brokerAddr = findBrokerAddressInSubscribe(self, mq.brokerName)
-
+    
     local h, b, err = self:request(REQUEST_CODE.QUERY_CONSUMER_OFFSET, brokerAddr, {
         topic = mq.topic,
         consumerGroup = consumerGroup,
@@ -367,6 +367,9 @@ function _M:pullKernelImpl(brokerName, header, timeout)
     if not brokerAddr then
         updateTopicRouteInfoFromNameserver(self, header.topic)
         brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    end
+    if not brokerAddr then
+        return nil, ('broker name %s not found'):format(brokerName)
     end
     header.bname = brokerName
     local h, b, err = self:request(REQUEST_CODE.PULL_MESSAGE, brokerAddr, header, nil, false, timeout)
@@ -535,7 +538,7 @@ local function processPopResponse(mq, status, extFields, messages)
         msg.properties["1ST_POP_TIME"] = msg.properties["1ST_POP_TIME"] or tostring(extFields.popTime)
         msg.brokerName = mq.brokerName
     end
-
+    
     return {
         restNum = tonumber(extFields.restNum),
         invisibleTime = tonumber(extFields.invisibleTime),

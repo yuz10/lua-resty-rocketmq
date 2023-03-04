@@ -338,7 +338,7 @@ local function submitPopConsumeRequest(self, msgFoundList, processQueue, message
         if #self.consumeMessageHookList > 0 then
             consumeMessageContext.status = status
             consumeMessageContext.success = status == _M.CONSUME_SUCCESS
-            consumeMessageContext.consumeContextType = status == _M.CONSUME_SUCCESS and 'SUCCESS' or 'FAILED'
+            consumeMessageContext.consumeContextType = status == _M.CONSUME_SUCCESS and 0 or 1
             for _, hook in ipairs(self.consumeMessageHookList) do
                 hook:consumeMessageAfter(consumeMessageContext)
             end
@@ -411,7 +411,7 @@ local function submitConsumeRequest(self, msgFoundList, processQueue, messageQue
         if #self.consumeMessageHookList > 0 then
             consumeMessageContext.status = status
             consumeMessageContext.success = status == _M.CONSUME_SUCCESS
-            consumeMessageContext.consumeContextType = status == _M.CONSUME_SUCCESS and 'SUCCESS' or 'FAILED'
+            consumeMessageContext.consumeContextType = status == _M.CONSUME_SUCCESS and 0 or 1
             for _, hook in ipairs(self.consumeMessageHookList) do
                 hook:consumeMessageAfter(consumeMessageContext)
             end
