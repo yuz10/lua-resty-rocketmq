@@ -374,7 +374,7 @@ function _M.queryTraceByMsgId(self, traceTopic, msgId)
     end
     local trace = {}
     for _, msg in ipairs(msgs) do
-        local ctxList = decoderFromTraceDataString(msg.body)
+        local ctxList = decoderFromTraceDataString(msg)
         for _, ctx in ipairs(ctxList) do
             if ctx.msgId == msgId then
                 table.insert(trace, ctx)

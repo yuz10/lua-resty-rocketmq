@@ -353,7 +353,6 @@ end, [[usage: mqadmin queryMsgByKey [-h] -k <arg> [-n <arg>] -t <arg>
  -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
  -t,--topic <arg>         topic name]] })
 
-
 table.insert(cmds, { "queryMsgByUniqueKey", function(adm, args)
     local topic = args['-t']
     local msgId = args['-i']
@@ -374,7 +373,6 @@ end, [[usage: mqadmin queryMsgByUniqueKey [-a] [-d <arg>] [-g <arg>] [-h] -i <ar
  -i,--msgId <arg>           Message Id
  -n,--namesrvAddr <arg>     Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
  -t,--topic <arg>           The topic of msg]] })
-
 
 table.insert(cmds, { "queryMsgByOffset", function(adm, args)
     local topic = args['-t']
@@ -418,9 +416,30 @@ table.insert(cmds, { "queryMsgTraceById", function(adm, args)
         print('query msg fail:', err)
         return
     end
+    local consumerTraceMap = {}
     for _, trace in ipairs(traces) do
-        print(cjson.encode(trace))
+        if trace.traceType == "Pub" then
+            print(("%-10s %-20s %-20s %-25s %-13s %-10s"):format(
+                    "#Type", "#ProducerGroup", "#ClientHost", "#SendTime", "#CostTimes", "#Status"))
+            print(("%-10s %-20s %-20s %-25s %-13s %-10s"):format(
+                    "Pub", trace.groupName, trace.clientHost, utils.timeMillisToHumanString2(trace.timeStamp), trace.costTime .. 'ms', trace.success and 'success' or 'failed'))
+            print()
+        elseif trace.traceType == "SubAfter" then
+            local groupName = trace.groupName
+            consumerTraceMap[groupName] = consumerTraceMap[groupName] or {}
+            table.insert(consumerTraceMap[groupName], trace)
+        end
     end
+    for group, traces in pairs(consumerTraceMap) do
+        print(("%-10s %-20s %-20s %-20s %-10s %-10s"):format(
+                "#Type", "#ConsumerGroup", "#ClientHost", "#ConsumerTime", "#CostTimes", "#Status"))
+        for _, trace in ipairs(traces) do
+            print(("%-10s %-20s %-20s %-20s %-10s %-10s"):format(
+                    "Sub", group, trace.clientHost, utils.timeMillisToHumanString2(trace.timeStamp), trace.costTime .. 'ms', trace.success and 'success' or 'failed'))
+        end
+        print()
+    end
+    
     return true
 end, [[usage: mqadmin queryMsgTraceById [-h] -i <arg> [-n <arg>] [-t <arg>]
  -h,--help                Print help

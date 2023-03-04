@@ -213,13 +213,15 @@ local function encoderFromContextBean(ctx)
     }
 end
 
-function _M.decoderFromTraceDataString(traceData)
+function _M.decoderFromTraceDataString(msg)
+    local traceData = msg.body
     local contextList = utils.split(traceData, FIELD_SPLITTER)
     local resList = {}
     for _, context in ipairs(contextList) do
         local line = utils.split(context, CONTENT_SPLITTER)
         if line[1] == _M.Pub then
             local pubContext = {
+                clientHost = msg.bornHost,
                 traceType = _M.Pub,
                 timeStamp = tonumber(line[2]),
                 regionId = line[3],
@@ -245,6 +247,7 @@ function _M.decoderFromTraceDataString(traceData)
             table.insert(resList, pubContext)
         elseif line[1] == _M.SubBefore then
             table.insert(resList, {
+                clientHost = msg.bornHost,
                 traceType = _M.SubBefore,
                 timeStamp = tonumber(line[2]),
                 regionId = line[3],
@@ -256,6 +259,7 @@ function _M.decoderFromTraceDataString(traceData)
             })
         elseif line[1] == _M.SubAfter then
             local subAfterContext = {
+                clientHost = msg.bornHost,
                 traceType = _M.SubAfter,
                 requestId = tonumber(line[2]),
                 msgId = line[3],
@@ -273,6 +277,7 @@ function _M.decoderFromTraceDataString(traceData)
             table.insert(resList, subAfterContext)
         elseif line[1] == _M.EndTransaction then
             table.insert(resList, {
+                clientHost = msg.bornHost,
                 traceType = _M.EndTransaction,
                 timeStamp = tonumber(line[2]),
                 regionId = line[3],
