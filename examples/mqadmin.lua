@@ -317,8 +317,12 @@ table.insert(cmds, { "queryMsgById", function(adm, args)
         return
     end
     for _, msgId in ipairs(msgIds) do
-        local msg = adm:viewMessage(msgId)
-        printMsg(msg)
+        local msg, err = adm:viewMessage(msgId)
+        if not msg then
+            print('query msg fail:', err)
+        else
+            printMsg(msg)
+        end
     end
     return true
 end, [[usage: mqadmin queryMsgById [-d <arg>] [-f <arg>] [-g <arg>] [-h] -i <arg> [-n <arg>] [-s <arg>] [-u <arg>]
@@ -330,6 +334,99 @@ end, [[usage: mqadmin queryMsgById [-d <arg>] [-f <arg>] [-g <arg>] [-h] -i <arg
  -n,--namesrvAddr <arg>     Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
  -s,--sendMessage <arg>     resend message
  -u,--unitName <arg>        unit name]] })
+
+table.insert(cmds, { "queryMsgByKey", function(adm, args)
+    local topic = args['-t']
+    local key = args['-k']
+    local msgs, err = adm:queryMessage(topic, key, 64, 0, 0x7fffffffffffffff, false)
+    if not msgs then
+        print('query msg fail:', err)
+        return
+    end
+    for _, msg in ipairs(msgs) do
+        printMsg(msg)
+    end
+    return true
+end, [[usage: mqadmin queryMsgByKey [-h] -k <arg> [-n <arg>] -t <arg>
+ -h,--help                Print help
+ -k,--msgKey <arg>        Message Key
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -t,--topic <arg>         topic name]] })
+
+
+table.insert(cmds, { "queryMsgByUniqueKey", function(adm, args)
+    local topic = args['-t']
+    local msgId = args['-i']
+    local msgs, err = adm:queryMessage(topic, msgId, 64, 0, 0x7fffffffffffffff, true)
+    if not msgs then
+        print('query msg fail:', err)
+        return
+    end
+    for _, msg in ipairs(msgs) do
+        printMsg(msg)
+    end
+    return true
+end, [[usage: mqadmin queryMsgByUniqueKey [-a] [-d <arg>] [-g <arg>] [-h] -i <arg> [-n <arg>] -t <arg>
+ -a,--showAll               Print all message, the limit is 32
+ -d,--clientId <arg>        The consumer's client id
+ -g,--consumerGroup <arg>   consumer group name
+ -h,--help                  Print help
+ -i,--msgId <arg>           Message Id
+ -n,--namesrvAddr <arg>     Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -t,--topic <arg>           The topic of msg]] })
+
+
+table.insert(cmds, { "queryMsgByOffset", function(adm, args)
+    local topic = args['-t']
+    local brokerName = args['-b']
+    local queueId = args['-i']
+    local offset = args['-o']
+    local pullResult, err = p.client:pullKernelImpl(brokerName, {
+        consumerGroup = "TOOLS_CONSUMER",
+        topic = topic,
+        queueId = queueId,
+        queueOffset = offset,
+        maxMsgNums = 1,
+        sysFlag = utils.buildSysFlag(false, false, true, false),
+        commitOffset = 0,
+        suspendTimeoutMillis = 1000,
+        subscription = "*",
+        subVersion = 0,
+        expressionType = "TAG"
+    }, 2000)
+    if not pullResult then
+        print("send err:", err)
+        return
+    end
+    for _, msg in ipairs(pullResult.msgFoundList) do
+        printMsg(msg)
+    end
+    return true
+end, [[usage: mqadmin queryMsgByOffset -b <arg> [-h] -i <arg> [-n <arg>] -o <arg> -t <arg>
+ -b,--brokerName <arg>    Broker Name
+ -h,--help                Print help
+ -i,--queueId <arg>       Queue Id
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -o,--offset <arg>        Queue Offset
+ -t,--topic <arg>         topic name]] })
+
+table.insert(cmds, { "queryMsgTraceById", function(adm, args)
+    local msgId = args['-i']
+    local traceTopic = args['-t'] or "RMQ_SYS_TRACE_TOPIC"
+    local traces, err = adm:queryTraceByMsgId(traceTopic, msgId)
+    if not traces then
+        print('query msg fail:', err)
+        return
+    end
+    for _, trace in ipairs(traces) do
+        print(cjson.encode(trace))
+    end
+    return true
+end, [[usage: mqadmin queryMsgTraceById [-h] -i <arg> [-n <arg>] [-t <arg>]
+ -h,--help                Print help
+ -i,--msgId <arg>         Message Id
+ -n,--namesrvAddr <arg>   Name server address list, eg: '192.168.0.1:9876;192.168.0.2:9876'
+ -t,--traceTopic <arg>    The name value of message trace topic]] })
 
 local function help()
     print("The most commonly used mqadmin commands are:")
