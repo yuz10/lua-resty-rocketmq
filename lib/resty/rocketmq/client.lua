@@ -365,7 +365,7 @@ _M.POLLING_NOT_FOUND = "POLLING_NOT_FOUND"
 function _M:pullKernelImpl(brokerName, header, timeout)
     local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
     if not brokerAddr then
-        updateTopicRouteInfoFromNameserver(self, header.topic)
+        updateTopicRouteInfoFromNameserver(self, brokerName)
         brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
     end
     if not brokerAddr then
