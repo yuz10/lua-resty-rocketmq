@@ -131,7 +131,7 @@ local function getSendResult(h, msg, mqSelected, err)
     }
 end
 
-local function produce(self, msg)
+local function produce(self, msg, mqSelector)
     if not core.checkTopic(msg.topic) or not core.checkMessage(msg.body) then
         return nil, 'invalid topic or message'
     end
@@ -139,7 +139,12 @@ local function produce(self, msg)
     if not topicPublishInfo then
         return nil, err
     end
-    local mqSelected = selectOneMessageQueue(topicPublishInfo)
+    local mqSelected
+    if mqSelector == nil then
+        mqSelected = selectOneMessageQueue(topicPublishInfo)
+    else
+        mqSelected = mqSelector(topicPublishInfo.messageQueueList, msg)
+    end
     local brokerAddr = self.client:findBrokerAddressInPublish(mqSelected.brokerName, msg.topic)
     msg.queueId = mqSelected.queueId
     msg.bname = mqSelected.brokerName
@@ -210,8 +215,8 @@ local function genMsg(groupName, topic, message, tags, keys, properties)
     }
 end
 
-function _M:send(topic, message, tags, keys, properties)
-    return produce(self, genMsg(self.groupName, topic, message, tags, keys, properties))
+function _M:send(topic, message, tags, keys, properties, mqSelector)
+    return produce(self, genMsg(self.groupName, topic, message, tags, keys, properties), mqSelector)
 end
 
 function _M:setTransactionListener(transactionListener)
