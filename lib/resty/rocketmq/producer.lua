@@ -123,7 +123,7 @@ local function getSendResult(h, msg, mqSelected, err)
         messageQueue = {
             topic = msg.topic,
             brokerName = mqSelected.brokerName,
-            queueId = tonumber(mqSelected.queueId),
+            queueId = tonumber(h.extFields.queueId),
         },
         offsetMsgId = h.extFields.msgId,
         msgId = msg.properties.UNIQ_KEY,
