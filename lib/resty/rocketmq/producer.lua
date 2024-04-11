@@ -139,6 +139,9 @@ local function produce(self, msg, mqSelector)
     if not topicPublishInfo then
         return nil, err
     end
+    if #topicPublishInfo.messageQueueList == 0 then
+        return nil, 'writable queue num is zero'
+    end
     local mqSelected
     if mqSelector == nil then
         mqSelected = selectOneMessageQueue(topicPublishInfo)
