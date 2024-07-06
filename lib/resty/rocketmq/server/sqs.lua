@@ -274,10 +274,11 @@ end
 function _M:receiveMessage(request)
     local wait_seconds = request.WaitTimeSeconds or 5
     local num = request.MaxNumberOfMessages or 1
+    local invisibleTime = request.VisibilityTimeout or 60
     local topic = request.QueueUrl
     local group = "GID_SQS"
-    local popResult, err = self.p.client:pop({ brokerName = 'broker-0', topic = topic, queueId = -1 }, 60000, num, group,
-            wait_seconds * 1000, true, client.INIT_MODE_MIN, nil, "*")
+    local popResult, err = self.p.client:pop({ brokerName = 'broker-0', topic = topic, queueId = -1 },
+            invisibleTime * 1000, num, group, wait_seconds * 1000, true, client.INIT_MODE_MIN, nil, "*")
     if not popResult then
         error(500, tostring(err))
     end
