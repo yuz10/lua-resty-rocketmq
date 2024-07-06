@@ -668,7 +668,7 @@ function _M:doAck(topic, consumerGroup, extraInfo)
     if h.code ~= RESPONSE_CODE.SUCCESS then
         return nil, ('ack return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
     end
-    return h.extFields
+    return h.extFields or {}
 end
 
 return _M

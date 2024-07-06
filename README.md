@@ -79,6 +79,8 @@ Table of Contents
           * [queryTraceByMsgId](#queryTraceByMsgId)
     * [HTTP proxy](#HTTP-proxy)
       * [Quick start](#quick-start-1)
+    * [SQS proxy](#SQS-proxy)
+      * [Quick start](#quick-start-2)
 * [Installation](#installation)
 * [See Also](#see-also)
 
@@ -639,6 +641,70 @@ Consume message using http proxy
 curl 'localhost:8080/topics/topic1/messages?consumer=group1&numOfMessages=16&waitseconds=10'
 
 curl localhost:8080/topics/topic1/messages/ack?consumer=group1 -XPUT -d '{"receiptHandles":["32312031363736303232303830303335203630303030203020302062726F6B65722D302030203331"]}'
+```
+
+[Back to TOC](#table-of-contents)
+
+
+SQS proxy
+----------------------
+
+### quick start
+
+SQS proxy provides http API compatible with AWS SQS (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html)
+
+Install and start RocketMQ
+
+Start SQS proxy
+
+```shell
+cd examples/
+openresty -c server/sqs.conf -p .
+```
+
+Set up AWS SDK project
+
+https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/get-started.html
+
+Send message using AWS SQS java SDK
+
+```java
+        SqsClient sqsClient = SqsClient.builder()
+                .httpClientBuilder(ApacheHttpClient.builder())
+                .endpointOverride(URI.create("http://localhost:8088"))
+                .build();
+        SendMessageRequest req = SendMessageRequest.builder()
+                .queueUrl("TopicTest")
+                .messageBody("body")
+                .build();
+        SendMessageResponse resp = sqsClient.sendMessage(req);
+```
+
+Consume message using AWS SQS java SDK
+
+```java
+        SqsClient sqsClient = SqsClient.builder()
+                .httpClientBuilder(ApacheHttpClient.builder())
+                .endpointOverride(URI.create("http://localhost:8088"))
+                .build();
+        while (true) {
+            ReceiveMessageRequest req = ReceiveMessageRequest.builder()
+                    .queueUrl("TopicTest")
+                    .visibilityTimeout(60)
+                    .maxNumberOfMessages(1)
+                    .waitTimeSeconds(5)
+                    .build();
+            ReceiveMessageResponse resp = sqsClient.receiveMessage(req);
+            System.out.printf("%s\n", resp);
+
+            for (Message message : resp.messages()) {
+                DeleteMessageRequest req2 = DeleteMessageRequest.builder()
+                        .queueUrl("TopicTest")
+                        .receiptHandle(message.receiptHandle())
+                        .build();
+                sqsClient.deleteMessage(req2);
+            }
+        }
 ```
 
 [Back to TOC](#table-of-contents)

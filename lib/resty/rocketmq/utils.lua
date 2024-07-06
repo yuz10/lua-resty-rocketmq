@@ -74,7 +74,12 @@ end
 local function fromHex(s)
     local res = {}
     for i = 1, #s / 2 do
-        table.insert(res, char(h2b[byte(s, 2 * i - 1)] * 16 + h2b[byte(s, 2 * i)]))
+        local hi = h2b[byte(s, 2 * i - 1)]
+        local lo = h2b[byte(s, 2 * i)]
+        if hi == nil or lo == nil then
+            return nil, 'not hex string'
+        end
+        table.insert(res, char(hi * 16 + lo))
     end
     return table.concat(res)
 end
