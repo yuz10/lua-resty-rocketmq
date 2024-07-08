@@ -95,6 +95,8 @@ req
     "Action": "SendMessage",
     "QueueUrl": "TopicTest",
     "MessageBody": "body",
+    "DelaySeconds": "10",
+    "MessageGroupId": "string",
     "MessageAttribute.1.Name": "key",
     "MessageAttribute.1.Value.DataType": "String",
     "MessageAttribute.1.Value.StringValue": "value",
@@ -122,6 +124,16 @@ function _M:sendMessage(request)
     local properties = request.properties or {}
     properties.UNIQ_KEY = utils.genUniqId()
     properties.WAIT = properties.WAIT or 'true'
+    properties.TIMER_DELAY_SEC = request.DelaySeconds
+    local mqSelector = nil
+    if request.MessageGroupId then
+        properties.__SHARDINGKEY = request.MessageGroupId
+        mqSelector = function(queueList, msg)
+            local groupId =  msg.properties.__SHARDINGKEY
+            local hash = utils.java_hash(groupId)
+            return queueList[(hash % #queueList) + 1]
+        end
+    end
     local msg = {
         producerGroup = "sqs_producer",
         topic = request.QueueUrl,
@@ -137,7 +149,7 @@ function _M:sendMessage(request)
         batch = false,
         body = body,
     }
-    local res, err = self.p:produce(msg)
+    local res, err = self.p:produce(msg, mqSelector)
     if not res then
         error(400, err)
     end
@@ -160,6 +172,8 @@ end
     "QueueUrl": "TopicTest",
     "SendMessageBatchRequestEntry.1.Id": "id1",
     "SendMessageBatchRequestEntry.1.MessageBody": "msg1",
+    "SendMessageBatchRequestEntry.1.DelaySeconds": "10",
+    "SendMessageBatchRequestEntry.1.MessageGroupId": "string",
     "SendMessageBatchRequestEntry.1.MessageAttribute.1.Name": "key",
     "SendMessageBatchRequestEntry.1.MessageAttribute.1.Value.StringValue": "value",
     "SendMessageBatchRequestEntry.1.MessageAttribute.1.Value.DataType": "String",
@@ -196,6 +210,17 @@ function _M:sendMessageBatch(request)
         local properties = request.properties or {}
         properties.UNIQ_KEY = utils.genUniqId()
         properties.WAIT = properties.WAIT or 'true'
+        properties.TIMER_DELAY_SEC = request['SendMessageBatchRequestEntry.' .. i .. '.DelaySeconds']
+        local mqSelector = nil
+        local messageGroup = request['SendMessageBatchRequestEntry.' .. i .. '.MessageGroupId']
+        if messageGroup then
+            properties.__SHARDINGKEY = messageGroup
+            mqSelector = function(queueList, msg)
+                local groupId =  msg.properties.__SHARDINGKEY
+                local hash = utils.java_hash(groupId)
+                return queueList[(hash % #queueList) + 1]
+            end
+        end
         local msg = {
             producerGroup = "sqs_producer",
             topic = request.QueueUrl,
@@ -211,7 +236,7 @@ function _M:sendMessageBatch(request)
             batch = false,
             body = body,
         }
-        local res, err = self.p:produce(msg)
+        local res, err = self.p:produce(msg, mqSelector)
         if not res then
             table.insert(fail, {
                 Code = "SendFail",
