@@ -107,6 +107,15 @@ local function toLong(a)
     return string.sub(s, 1, #s - 3)
 end
 
+function _M.intTobin(num)
+    local t = {}
+    for i = 1, 4 do
+        t[5 - i] = char(band(num, 0xff))
+        num = rshift(num, 8)
+    end
+    return table.concat(t)
+end
+
 local function toIp(a)
     if #a == 4 then
         --ipv4

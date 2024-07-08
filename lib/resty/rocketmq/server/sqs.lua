@@ -10,8 +10,21 @@ local ngx = ngx
 local log = ngx.log
 local ERR = ngx.ERR
 
+local STRING_TYPE_FIELD_INDEX = string.char(1)
+local BINARY_TYPE_FIELD_INDEX = string.char(2)
+local BINARY_TYPE_MARK = string.char(3)
+
 local _M = {}
 _M.__index = _M
+
+local SYSTEM_PROP = {}
+SYSTEM_PROP.CLUSTER = true
+SYSTEM_PROP.TRACE_ON = true
+SYSTEM_PROP.UNIQ_KEY = true
+SYSTEM_PROP['1ST_POP_TIME'] = true
+SYSTEM_PROP.WAIT = true
+SYSTEM_PROP.MSG_REGION = true
+SYSTEM_PROP.POP_CK = true
 
 local function md5(body)
     local instance = resty_md5:new()
@@ -89,6 +102,87 @@ function _M:process()
     ngx.say(response)
 end
 
+local function getList(request, prefix)
+    local attrs = {}
+    local i = 1
+    while true do
+        local name = request[prefix .. i]
+        if name == nil then
+            break
+        end
+        table.insert(attrs, name)
+        i = i + 1
+    end
+    return attrs
+end
+
+local function getAttrs(request, prefix)
+    local attrs = {}
+    local i = 1
+    while true do
+        local name = request[prefix .. 'MessageAttribute.' .. i .. '.Name']
+        if name == nil then
+            break
+        end
+        local type = request[prefix .. 'MessageAttribute.' .. i .. '.Value.DataType']
+        local attr = {
+            Name = name,
+            Value = {
+                DataType = type,
+            }
+        }
+        if type == 'String' then
+            attr.Value.StringValue = request[prefix .. 'MessageAttribute.' .. i .. '.Value.StringValue']
+        elseif type == 'Binary' then
+            attr.Value.BinaryValue = request[prefix .. 'MessageAttribute.' .. i .. '.Value.BinaryValue']
+        end
+        table.insert(attrs, attr)
+        i = i + 1
+    end
+    return attrs
+end
+
+local function attrsMd5(attrs)
+    local keys = {}
+    local attrMap = {}
+    for _, attr in ipairs(attrs) do
+        table.insert(keys, attr.Name)
+        attrMap[attr.Name] = attr
+    end
+    table.sort(keys)
+    local instance = resty_md5:new()
+    for _, key in ipairs(keys) do
+        local attr = attrMap[key]
+        local type = attr.Value.DataType
+        instance:update(utils.intTobin(#attr.Name))
+        instance:update(attr.Name)
+        instance:update(utils.intTobin(#type))
+        instance:update(type)
+        if type == 'String' then
+            instance:update(STRING_TYPE_FIELD_INDEX)
+            instance:update(utils.intTobin(#attr.Value.StringValue))
+            instance:update(attr.Value.StringValue)
+        elseif type == 'Binary' then
+            instance:update(BINARY_TYPE_FIELD_INDEX)
+            local bytes = ngx.decode_base64(attr.Value.BinaryValue)
+            instance:update(utils.intTobin(#bytes))
+            instance:update(bytes)
+        end
+    end
+    return str.to_hex(instance:final())
+end
+
+local function addAttrs(properties, attrs)
+    for _, attr in ipairs(attrs) do
+        local type = attr.Value.DataType
+        if type == 'String' then
+            properties[attr.Name] = attr.Value.StringValue
+        elseif type == 'Binary' then
+            properties[attr.Name] = BINARY_TYPE_MARK .. attr.Value.BinaryValue
+        end
+    end
+end
+
 --[[
 req
 {
@@ -97,9 +191,20 @@ req
     "MessageBody": "body",
     "DelaySeconds": "10",
     "MessageGroupId": "string",
-    "MessageAttribute.1.Name": "key",
+    "MessageAttribute.1.Name": "str",
     "MessageAttribute.1.Value.DataType": "String",
     "MessageAttribute.1.Value.StringValue": "value",
+    "MessageAttribute.2.Name": "binlist",
+    "MessageAttribute.2.Value.DataType": "BinaryList",
+    "MessageAttribute.2.Value.BinaryListValue.1": "YQ==",
+    "MessageAttribute.2.Value.BinaryListValue.2": "Yg==",
+    "MessageAttribute.3.Name": "bin",
+    "MessageAttribute.3.Value.DataType": "Binary",
+    "MessageAttribute.3.Value.BinaryValue": "dmFsdWU=",
+    "MessageAttribute.4.Name": "strlist",
+    "MessageAttribute.4.Value.DataType": "StringList",
+    "MessageAttribute.4.Value.StringListValue.1": "a",
+    "MessageAttribute.4.Value.StringListValue.2": "b",
     "Version": "2012-11-05"
 }
 resp
@@ -129,11 +234,13 @@ function _M:sendMessage(request)
     if request.MessageGroupId then
         properties.__SHARDINGKEY = request.MessageGroupId
         mqSelector = function(queueList, msg)
-            local groupId =  msg.properties.__SHARDINGKEY
+            local groupId = msg.properties.__SHARDINGKEY
             local hash = utils.java_hash(groupId)
             return queueList[(hash % #queueList) + 1]
         end
     end
+    local attrs = getAttrs(request, '')
+    addAttrs(properties, attrs)
     local msg = {
         producerGroup = "sqs_producer",
         topic = request.QueueUrl,
@@ -159,7 +266,7 @@ function _M:sendMessage(request)
             SendMessageResult = {
                 MessageId = res.sendResult.msgId,
                 MD5OfMessageBody = md5(body),
-                --MD5OfMessageAttributes = "string", todo unsupported
+                MD5OfMessageAttributes = attrsMd5(attrs),
                 --MD5OfMessageSystemAttributes = "string",
                 --SequenceNumber = i
             }
@@ -216,11 +323,13 @@ function _M:sendMessageBatch(request)
         if messageGroup then
             properties.__SHARDINGKEY = messageGroup
             mqSelector = function(queueList, msg)
-                local groupId =  msg.properties.__SHARDINGKEY
+                local groupId = msg.properties.__SHARDINGKEY
                 local hash = utils.java_hash(groupId)
                 return queueList[(hash % #queueList) + 1]
             end
         end
+        local attrs = getAttrs(request, 'SendMessageBatchRequestEntry.' .. i .. '.')
+        addAttrs(properties, attrs)
         local msg = {
             producerGroup = "sqs_producer",
             topic = request.QueueUrl,
@@ -249,7 +358,7 @@ function _M:sendMessageBatch(request)
                 Id = id,
                 MessageId = res.sendResult.msgId,
                 MD5OfMessageBody = md5(body),
-                --MD5OfMessageAttributes = "string", todo unsupported
+                MD5OfMessageAttributes = attrsMd5(attrs),
                 --MD5OfMessageSystemAttributes = "string",
                 --SequenceNumber = i
             })
@@ -283,16 +392,34 @@ end
 <ReceiveMessageResponse>
     <ReceiveMessageResult>
         <Message>
-            <MessageId>3980e413-4935-4d86-9fec-17e6fe487eda</MessageId>
+            <MessageId>a1ab7794-7eb0-4f73-b033-6942af25454d</MessageId>
             <ReceiptHandle>
-                AQEBxYnRHQPmFgcl7CZBa9L9BLk+FHlSCQfLoCS0tlGXb4XDRbI3gjZPFG3gnuLdjPDRXESqGOXFzzQBaZ/a30wJjEUMJvj+jwhfyh8gfAgt5CYxjqBXflavph4UUX5fdxltgNhMvyWp7Vf1W4s6HkVfkiNHAu3DYQ7ZZ+FEW/nM+aLwvFejhRz2Imp3Sy7Va9pH6iBOD4D5Pnpn2/VfEvIvP9rE49o9FfssLVc8gYZyXOBtLCH4RYB26FL69BmUHZvtjo7ChTspiGtBYYQn3bBf07XHDXuthcS1EpLRs07qSmQ+rXDbTeVzTmV/TLcdc/e6DqtcCWve5d4zEHPcvTrFx9jPYB7mdl8YWhKc3L4H+fqEzuRCFDc/VO5QEE9gCfU/YHCcchx5knFRMfCu7qYJ7Q==
-            </ReceiptHandle>
-            <MD5OfBody>841a2d689ad86bd1611447453c22c6fc</MD5OfBody>
-            <Body>body</Body>
+                AQEBFDpJmTtu3unEbpcNDKLRZOgJ7cGEiBGrOKmIzZq6SCZvZANKPqc6+biTehX0NlxpndwM91dqvq1pbE8ssmFJBQo+rKt6LST+idWOb7SNmfdFGJYF4Y+wJfg5gTOhhUqqe+EP4x5gmDucWz1aAVHKoF9EPsQDboZD7p/2uolZlCH7xp/1Y4AZZuElT0M3rT7tQcYSlXL66Buyren8gAQDucbi5Zn+hTJnWszze+ROCYnKbCccGTTZf1F2plSp3AoPvTIoZiuVQLq/nAZ/8tGnVSB5c2X3YZd3VeDTUkm0tzq7CUJx3a5YRhUt4xJIE8CCzgUtwDr89pH16ZInSJ/gVVbYi3Yi3hG+qs7b70NWQxWbpevSXKICSZnIcNRUz6cQn8gn4TJ5t6KdK/2jwMbxDg==</ReceiptHandle>
+            <MD5OfBody>3fccf7e8ef8bb6df5c1a77f579c5b914</MD5OfBody>
+            <MD5OfMessageAttributes>cbbe61a3b4ff00dc4eb25dd6da1830d4</MD5OfMessageAttributes>
+            <Body>msg1</Body>
+            <Attribute>
+                <Name>SenderId</Name>
+                <Value>127591162622</Value>
+            </Attribute>
+            <MessageAttribute>
+                <Name>bin</Name>
+                <Value>
+                    <DataType>Binary</DataType>
+                    <BinaryValue>dmFsdWU=</BinaryValue>
+                </Value>
+            </MessageAttribute>
+            <MessageAttribute>
+                <Name>str</Name>
+                <Value>
+                    <DataType>String</DataType>
+                    <StringValue>value</StringValue>
+                </Value>
+            </MessageAttribute>
         </Message>
     </ReceiveMessageResult>
     <ResponseMetadata>
-        <RequestId>f91f1b38-08e8-59cd-aace-443b1ae6f4e6</RequestId>
+        <RequestId>c43f9283-caf4-5054-a9c5-cd86724af534</RequestId>
     </ResponseMetadata>
 </ReceiveMessageResponse>
 ]]
@@ -355,11 +482,35 @@ function _M:receiveMessage(request)
         }
     end
     for _, msg in ipairs(popResult.msgFoundList) do
+        local attrs = {}
+        for k, v in pairs(msg.properties) do
+            if not SYSTEM_PROP[k] then
+                if string.byte(v, 1) == string.byte(BINARY_TYPE_MARK) then
+                    table.insert(attrs, {
+                        Name = k,
+                        Value = {
+                            DataType = "Binary",
+                            BinaryValue = string.sub(v, 2),
+                        }
+                    })
+                else
+                    table.insert(attrs, {
+                        Name = k,
+                        Value = {
+                            DataType = "String",
+                            StringValue = v,
+                        }
+                    })
+                end
+            end
+        end
         table.insert(messages, {
             ReceiptHandle = str.to_hex(msg.properties.POP_CK),
             MessageId = msg.properties.UNIQ_KEY,
             MD5OfBody = md5(msg.body),
+            MD5OfMessageAttributes = attrsMd5(attrs),
             Body = msg.body,
+            MessageAttribute = attrs,
         })
     end
     return {
