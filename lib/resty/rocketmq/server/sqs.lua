@@ -94,6 +94,10 @@ function _M:process()
         resp = self:deleteMessage(request)
     elseif request.Action == 'DeleteMessageBatch' then
         resp = self:deleteMessageBatch(request)
+    elseif request.Action == 'ChangeMessageVisibility' then
+        resp = self:changeMessageVisibility(request)
+    elseif request.Action == 'ChangeMessageVisibilityBatch' then
+        resp = self:changeMessageVisibilityBatch(request)
     else
         error(400, 'action not supported')
     end
@@ -612,6 +616,113 @@ function _M:deleteOneMessage(success, fail, request, i)
         return
     end
     local res, err = self.p.client:doAck(topic, group, handle)
+    if not res then
+        table.insert(fail, {
+            Code = "AckFail",
+            Id = id,
+            Message = tostring(err),
+            SenderFault = false
+        })
+    else
+        table.insert(success, {
+            Id = id
+        })
+    end
+end
+
+--[[
+{
+    "Action": "ChangeMessageVisibility",
+    "QueueUrl": "TopicTest",
+    "ReceiptHandle": "31392031373230323631353636323334203630303030203720322062726F6B65722D302030203139",
+    "VisibilityTimeout": "60",
+    "Version": "2012-11-05",
+}
+<ChangeMessageVisibilityResponse>
+    <ResponseMetadata>
+        <RequestId>6a7a282a-d013-4a59-aba9-335b0fa48bed</RequestId>
+    </ResponseMetadata>
+</ChangeMessageVisibilityResponse>
+]]
+function _M:changeMessageVisibility(request)
+    local topic = request.QueueUrl
+    local invisibleTime = tonumber(request.VisibilityTimeout)
+    local group = "GID_SQS"
+    local handle = utils.fromHex(request.ReceiptHandle)
+    if handle == nil then
+        error(400, "The input receipt handle is invalid.")
+    end
+    local res, err = self.p.client:changeInvisibleTime(topic, group, handle, invisibleTime)
+    if not res then
+        error(500, tostring(err))
+    end
+    return {
+        ChangeMessageVisibilityResponse = {}
+    }
+end
+--[[
+{
+    "Action": "ChangeMessageVisibilityBatch",
+    "QueueUrl": "TopicTest",
+    "ChangeMessageVisibilityBatchRequestEntry.1.Id": "AC110001D07F4C8733300D4F10230000",
+    "ChangeMessageVisibilityBatchRequestEntry.1.ReceiptHandle": "31392031373230323631353636323334203630303030203720322062726F6B65722D302030203139",
+    "ChangeMessageVisibilityBatchRequestEntry.1.VisibilityTimeout": "45",
+    "Version": "2012-11-05",
+}
+<ChangeMessageVisibilityBatchResponse>
+  <ChangeMessageVisibilityBatchResult>
+    <ChangeMessageVisibilityBatchResultEntry>
+      <Id>ecfab988-27f3-4687-b1b3-debe7898f84c</Id>
+    </ChangeMessageVisibilityBatchResultEntry>
+    <BatchResultErrorEntry>
+      <Id>err</Id>
+      <Code>ReceiptHandleIsInvalid</Code>
+      <Message>The input receipt handle is invalid.</Message>
+      <SenderFault>true</SenderFault>
+    </BatchResultErrorEntry>
+  </DeleteMessageBatchResult>
+  <ResponseMetadata>
+    <RequestId>717fae28-2003-5812-b68f-f12b001d2a6b</RequestId>
+  </ResponseMetadata>
+</DeleteMessageBatchResponse>
+]]
+function _M:changeMessageVisibilityBatch(request)
+    local success = setmetatable({}, cjson_safe.array_mt)
+    local fail = setmetatable({}, cjson_safe.array_mt)
+    local i = 1
+    while true do
+        local id = request['ChangeMessageVisibilityBatchRequestEntry.' .. i .. '.Id']
+        if id == nil then
+            break
+        end
+        self:changeMessageVisibilityOneMessage(success, fail, request, i)
+        i = i + 1
+    end
+    return {
+        DeleteMessageBatchResponse = {
+            DeleteMessageBatchResult = {
+                DeleteMessageBatchResultEntry = success,
+                BatchResultErrorEntry = fail
+            }
+        }
+    }
+end
+function _M:changeMessageVisibilityOneMessage(success, fail, request, i)
+    local topic = request.QueueUrl
+    local group = "GID_SQS"
+    local id = request['ChangeMessageVisibilityBatchRequestEntry.' .. i .. '.Id']
+    local handle = utils.fromHex(request['ChangeMessageVisibilityBatchRequestEntry.' .. i .. '.ReceiptHandle'])
+    local invisibleTime = utils.fromHex(request['ChangeMessageVisibilityBatchRequestEntry.' .. i .. '.VisibilityTimeout'])
+    if handle == nil then
+        table.insert(fail, {
+            Code = "AckFail",
+            Id = id,
+            Message = "The input receipt handle is invalid.",
+            SenderFault = true
+        })
+        return
+    end
+    local res, err = self.p.client:changeInvisibleTime(topic, group, handle, invisibleTime)
     if not res then
         table.insert(fail, {
             Code = "AckFail",

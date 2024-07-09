@@ -641,7 +641,7 @@ function _M:ack(message, consumerGroup)
     return self:doAck(message.topic, consumerGroup, message.properties['POP_CK'])
 end
 
-function _M:doAck(topic, consumerGroup, extraInfo)
+function _M:getPopRequest(topic, consumerGroup, extraInfo)
     local extraInfoStrs = split(extraInfo, ' ')
     local topicVersion = tonumber(extraInfoStrs[5])
     local brokerName = extraInfoStrs[6]
@@ -662,14 +662,22 @@ function _M:doAck(topic, consumerGroup, extraInfo)
     if brokerAddr == nil then
         return nil
     end
-    local h, b, err = self:request(REQUEST_CODE.ACK_MESSAGE, brokerAddr, {
+    return brokerAddr, {
         topic = realTopic,
         queueId = queueId,
         offset = offset,
         consumerGroup = consumerGroup,
         extraInfo = extraInfo,
         bname = brokerName,
-    })
+    }
+end
+
+function _M:doAck(topic, consumerGroup, extraInfo)
+    local brokerAddr, requestHeader = self:getPopRequest(topic, consumerGroup, extraInfo)
+    if brokerAddr == nil then
+        return nil
+    end
+    local h, b, err = self:request(REQUEST_CODE.ACK_MESSAGE, brokerAddr, requestHeader)
     if err then
         return nil, err
     end
@@ -679,4 +687,19 @@ function _M:doAck(topic, consumerGroup, extraInfo)
     return h.extFields or {}
 end
 
+function _M:changeInvisibleTime(topic, consumerGroup, extraInfo, invisibleTime)
+    local brokerAddr, requestHeader = self:getPopRequest(topic, consumerGroup, extraInfo)
+    if brokerAddr == nil then
+        return nil
+    end
+    requestHeader.invisibleTime = invisibleTime
+    local h, b, err = self:request(REQUEST_CODE.CHANGE_MESSAGE_INVISIBLETIME, brokerAddr, requestHeader)
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('ack return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    return h.extFields or {}
+end
 return _M
