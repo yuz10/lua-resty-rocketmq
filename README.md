@@ -113,9 +113,9 @@ see https://openresty.org/cn/linux-packages.html for more distributions
 
 ### Install and start RocketMQ
 ```shell
-wget https://archive.apache.org/dist/rocketmq/5.2.0/rocketmq-all-5.2.0-bin-release.zip
-unzip rocketmq-all-5.2.0-bin-release.zip
-cd rocketmq-5.2.0
+wget https://archive.apache.org/dist/rocketmq/5.3.0/rocketmq-all-5.3.0-bin-release.zip
+unzip rocketmq-all-5.3.0-bin-release.zip
+cd rocketmq-5.3.0
 nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
@@ -615,9 +615,9 @@ HTTP proxy provides http API of produce/consume messages. RocketMQ >= 5.0.0 is r
 Install and start RocketMQ
 
 ```shell
-wget https://archive.apache.org/dist/rocketmq/5.2.0/rocketmq-all-5.2.0-bin-release.zip
-unzip rocketmq-all-5.2.0-bin-release.zip
-cd rocketmq-5.2.0
+wget https://archive.apache.org/dist/rocketmq/5.3.0/rocketmq-all-5.3.0-bin-release.zip
+unzip rocketmq-all-5.3.0-bin-release.zip
+cd rocketmq-5.3.0
 nohup bash bin/mqnamesrv &
 nohup bash bin/mqbroker -n localhost:9876 -c conf/broker.conf &
 ```
