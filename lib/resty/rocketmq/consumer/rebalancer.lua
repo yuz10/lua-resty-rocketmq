@@ -236,7 +236,7 @@ function _M:start()
     local self = self
     local loop
     loop = function()
-        if self.exit then
+        if not self.consumer.running then
             return
         end
         doRebalance(self)
