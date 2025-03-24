@@ -649,10 +649,12 @@ function _M:getPopRequest(topic, consumerGroup, extraInfo)
     local offset = extraInfoStrs[8]
     -- finalOffset popTime invisibleTime reviveQid topicVersion brokerName queueId queueOffset
     local realTopic = topic
-    if topicVersion == 1 then
-        realTopic = '%RETRY%' .. consumerGroup .. '_' .. topic
-    elseif topicVersion == 2 then
-        realTopic = '%RETRY%' .. consumerGroup .. '+' .. topic
+    if not utils.startsWith(topic, core.RETRY_GROUP_TOPIC_PREFIX) then
+        if topicVersion == 1 then
+            realTopic = '%RETRY%' .. consumerGroup .. '_' .. topic
+        elseif topicVersion == 2 then
+            realTopic = '%RETRY%' .. consumerGroup .. '+' .. topic
+        end
     end
     local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
     if brokerAddr == nil then
