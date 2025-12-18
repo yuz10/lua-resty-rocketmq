@@ -66,7 +66,7 @@ function _M.fetchBrokerRuntimeStats(self, brokerAddr)
     return cjson_safe.decode(body)
 end
 
-function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
+function _M.createTopic(self, newTopic, queueNum, topicSysFlag, attributes)
     if not core.checkTopic(newTopic) then
         return nil, ('topic %s invalid format'):format(newTopic)
     end
@@ -82,12 +82,17 @@ function _M.createTopic(self, newTopic, queueNum, topicSysFlag)
     if brokerDataList == nil or #brokerDataList == 0 then
         return nil, 'Not found broker, maybe key is wrong'
     end
-    
+
+    local attr = {}
+    for k, v in pairs(attributes or {}) do
+        table.insert(attr, k .. '=' .. v)
+    end
     local topicConfig = {
         topicName = newTopic,
         readQueueNums = queueNum,
         writeQueueNums = queueNum,
         topicSysFlag = topicSysFlag or 0,
+        attributes = table.concat(attr, ',')
     }
     
     local createOKAtLeastOnce = false
@@ -118,6 +123,7 @@ function _M.createTopicForBroker(self, addr, topicConfig)
         topicFilterType = topicConfig.topicFilterType or "SINGLE_TAG",
         topicSysFlag = topicConfig.topicSysFlag or 0,
         order = topicConfig.order or false,
+        attributes = topicConfig.attributes,
     })
     if res and res.code ~= RESPONSE_CODE.SUCCESS then
         return nil, res.remark
@@ -147,6 +153,37 @@ function _M.deleteTopicInNameServer(self, topic)
         end
         return res, err
     end
+end
+
+function _M.createGroup(self, clusterName, groupConfig)
+    local clusterInfo, err = self:examineBrokerClusterInfo()
+    if not clusterInfo then
+        return nil, err
+    end
+    local addrs = {}
+    for _, bname in ipairs(clusterInfo.clusterAddrTable[clusterName]) do
+        local broker = clusterInfo.brokerAddrTable[bname]
+        for _, addr in pairs(broker.brokerAddrs) do
+            table.insert(addrs, addr)
+        end
+    end
+
+    for _, addr in ipairs(addrs) do
+        local res, createErr = _M.createGroupForBroker(self, addr, groupConfig)
+        if not res then
+            return nil, createErr
+        end
+    end
+    return groupConfig
+end
+
+
+function _M.createGroupForBroker(self, addr, groupConfig)
+    local res, _, err = self.client:request(REQUEST_CODE.UPDATE_AND_CREATE_SUBSCRIPTIONGROUP, addr, {}, cjson_safe.encode(groupConfig))
+    if res and res.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, res.remark
+    end
+    return res, err
 end
 
 function _M.getTopicStatsInfo(self, addr, topic)

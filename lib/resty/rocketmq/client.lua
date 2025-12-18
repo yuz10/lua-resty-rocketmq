@@ -641,7 +641,7 @@ function _M:ack(message, consumerGroup)
     return self:doAck(message.topic, consumerGroup, message.properties['POP_CK'])
 end
 
-function _M:getPopRequest(topic, consumerGroup, extraInfo)
+function _M:getPopRequest(topic, consumerGroup, extraInfo, liteTopic)
     local extraInfoStrs = split(extraInfo, ' ')
     local topicVersion = tonumber(extraInfoStrs[5])
     local brokerName = extraInfoStrs[6]
@@ -671,11 +671,12 @@ function _M:getPopRequest(topic, consumerGroup, extraInfo)
         consumerGroup = consumerGroup,
         extraInfo = extraInfo,
         bname = brokerName,
+        liteTopic = liteTopic,
     }
 end
 
-function _M:doAck(topic, consumerGroup, extraInfo)
-    local brokerAddr, requestHeader = self:getPopRequest(topic, consumerGroup, extraInfo)
+function _M:doAck(topic, consumerGroup, extraInfo, liteTopic)
+    local brokerAddr, requestHeader = self:getPopRequest(topic, consumerGroup, extraInfo, liteTopic)
     if brokerAddr == nil then
         return nil
     end
@@ -696,6 +697,116 @@ function _M:changeInvisibleTime(topic, consumerGroup, extraInfo, invisibleTime)
     end
     requestHeader.invisibleTime = invisibleTime
     local h, b, err = self:request(REQUEST_CODE.CHANGE_MESSAGE_INVISIBLETIME, brokerAddr, requestHeader)
+    if err then
+        return nil, err
+    end
+    if h.code ~= RESPONSE_CODE.SUCCESS then
+        return nil, ('ack return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    return h.extFields or {}
+end
+
+local function parseLiteOrderCountInfo(orderCountInfo, msgCount)
+    if orderCountInfo == nil or orderCountInfo == '' then
+        return nil
+    end
+    local infos = split(orderCountInfo, ";")
+    if #infos ~= msgCount then
+        return nil
+    end
+    local res = {}
+    for _, info in ipairs(infos) do
+        local spl = split(info, ' ')
+        table.insert(res, tonumber(spl[3]) or 0)
+    end
+    return res
+end
+
+local function processPopLiteResponse(brokerName, topic, extFields, messages)
+    local orderCountList = parseLiteOrderCountInfo(extFields.orderCountInfo, #messages)
+    for i, msg in ipairs(messages) do
+        local queues = split(msg.properties["INNER_MULTI_DISPATCH"], ",");
+        local queueOffsets = split(msg.properties["INNER_MULTI_QUEUE_OFFSET"], ",");
+        if #queues == 1 and #queues == #queueOffsets then
+            msg.properties["POP_CK"] = buildExtraInfo(0, extFields.popTime, extFields.invisibleTime, extFields.reviveQid, topic, brokerName, 0) .. ' ' .. queueOffsets[1]
+            msg.properties["1ST_POP_TIME"] = msg.properties["1ST_POP_TIME"] or tostring(extFields.popTime)
+            msg.brokerName = brokerName
+            msg.reconsumeTimes = orderCountList and orderCountList[i] or 0
+            msg.queueOffset = tonumber(queueOffsets[1])
+        end
+    end
+
+    return {
+        popStatus = _M.FOUND,
+        msgFoundList = messages,
+    }
+end
+
+function _M:popLiteMessage(brokerName, clientId, consumerGroup, topic, maxNums, invisibleTime, pollTime, bornTime, attemptId)
+    local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    if not brokerAddr then
+        local res, err = updateTopicRouteInfoFromNameserver(self, topic)
+        if not res then
+            return nil, err
+        end
+        brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    end
+    if brokerAddr == nil then
+        return nil, 'broker address not found for broker ' .. mq.brokerName
+    end
+    local header = {
+        clientId = clientId,
+        consumerGroup = consumerGroup,
+        topic = topic,
+        maxMsgNum = maxNums,
+        invisibleTime = invisibleTime,
+        pollTime = pollTime,
+        bornTime = bornTime,
+        attemptId = attemptId,
+    }
+    local timeout = pollTime + 10000
+    local h, b, err = self:request(REQUEST_CODE.POP_LITE_MESSAGE, brokerAddr, header, nil, false, timeout)
+    if not h then
+        return nil, err
+    end
+    local status
+    if h.code == RESPONSE_CODE.SUCCESS then
+        status = _M.FOUND
+    elseif h.code == RESPONSE_CODE.POLLING_FULL then
+        status = _M.POLLING_FULL
+    elseif h.code == RESPONSE_CODE.POLLING_TIMEOUT then
+        status = _M.POLLING_NOT_FOUND
+    elseif h.code == RESPONSE_CODE.PULL_NOT_FOUND then
+        status = _M.POLLING_NOT_FOUND
+    else
+        log(WARN, ('pop return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or ''))
+        return nil, ('pop return %s, %s'):format(core.RESPONSE_CODE_NAME[h.code] or h.code, h.remark or '')
+    end
+    if status ~= _M.FOUND then
+        return {
+            status = status,
+        }
+    end
+    local messages = {}
+    core.decodeMsgs(messages, b, true, false)
+    return processPopLiteResponse(brokerName, topic, h.extFields, messages)
+end
+
+function _M:syncLiteSubscription(brokerName, liteSubscriptionDTO)
+    local brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    if not brokerAddr then
+        local res, err = updateTopicRouteInfoFromNameserver(self, brokerName)
+        if not res then
+            return nil, err
+        end
+        brokerAddr = findBrokerAddressInSubscribe(self, brokerName)
+    end
+    if brokerAddr == nil then
+        return nil, 'broker address not found for broker ' .. mq.brokerName
+    end
+    local h, b, err = self:request(REQUEST_CODE.LITE_SUBSCRIPTION_CTL, brokerAddr, {}, cjson_safe.encode {
+        subscriptionSet = { liteSubscriptionDTO }
+    })
     if err then
         return nil, err
     end
