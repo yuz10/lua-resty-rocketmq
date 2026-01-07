@@ -18,7 +18,7 @@ jobs:
           - 4.9.8
           - 5.1.4
           - 5.3.1
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
